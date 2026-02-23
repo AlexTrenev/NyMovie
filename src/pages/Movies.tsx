@@ -1,592 +1,546 @@
 // src/pages/Movies.tsx
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom"; 
+import { useEffect, useState, useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
-// --- TYPER & KONFIGURATION ---
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 type DisplayMovie = {
-  id: number | string; 
+  id: number | string;
   title: string;
   poster_path: string;
   release_date: string;
-  imdbRating?: string; 
+  imdbRating?: string;
 };
 
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const OMDb_BASE_URL = "https://www.omdbapi.com/";
-const IMG_BASE_URL = "https://image.tmdb.org/t/p/w500"; 
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const TMDB = "https://api.themoviedb.org/3";
+const OMDB = "https://www.omdbapi.com/";
+const IMG  = "https://image.tmdb.org/t/p/w500";
 
-const MotionLink = motion(Link);
+// ─── STEP DATA ────────────────────────────────────────────────────────────────
+const STEPS = [
+  {
+    key: "era",
+    label: "01 / ERA",
+    question: "When was it made?",
+    options: [
+      { label: "Pre-1970",  sub: "The Classics",   value: "classic"  },
+      { label: "1970–1989", sub: "New Hollywood",  value: "70s_80s"  },
+      { label: "1990–2009", sub: "The Golden Age", value: "90s_00s"  },
+      { label: "2010+",     sub: "Contemporary",   value: "modern"   },
+    ],
+  },
+  {
+    key: "mood",
+    label: "02 / MOOD",
+    question: "How do you want to feel?",
+    options: [
+      { label: "Feelgood",    sub: "Light & fun",         value: "feelgood"   },
+      { label: "Heartfelt",   sub: "Drama & romance",     value: "heartfelt"  },
+      { label: "Tense",       sub: "Thriller & mystery",  value: "suspense"   },
+      { label: "Intense",     sub: "Action & war",        value: "intense"    },
+      { label: "Thoughtful",  sub: "Drama & history",     value: "thoughtful" },
+      { label: "Dark",        sub: "Horror & crime",      value: "dark"       },
+      { label: "Epic",        sub: "Adventure & fantasy", value: "epic"       },
+      { label: "Sci-Fi",      sub: "Future & beyond",     value: "sci-fi"     },
+    ],
+  },
+  {
+    key: "duration",
+    label: "03 / TIME",
+    question: "How long do you have?",
+    options: [
+      { label: "Quick",    sub: "Under 90 min",  value: "short"  },
+      { label: "Standard", sub: "90 – 120 min",  value: "medium" },
+      { label: "Epic",     sub: "Over 120 min",  value: "long"   },
+    ],
+  },
+] as const;
 
-// --- ANIMATION-VARIANTER ---
-const gridVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      delayChildren: 0.1, 
-      staggerChildren: 0.1 
-    }
-  }
+type StepKey = "era" | "mood" | "duration";
+
+// ─── GENRE MAP ────────────────────────────────────────────────────────────────
+const GENRE_MAP: Record<string, { include: string; exclude?: string }> = {
+  feelgood:   { include: "35|10751|16",  exclude: "27|80|53|10752" },
+  heartfelt:  { include: "18|10749",     exclude: "27|53|10752"    },
+  dark:       { include: "27|80"                                   },
+  suspense:   { include: "53|9648"                                 },
+  intense:    { include: "28|10752"                                },
+  thoughtful: { include: "18|36|99",     exclude: "10749|53"       },
+  epic:       { include: "12|14"                                   },
+  "sci-fi":   { include: "878"                                     },
 };
 
-const cardVariants = {
-  hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1 }
-};
-
-const fadeVariant = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1 },
-  exit: { opacity: 0 }
-};
-
-// Alternativ för filter
-const eraOptions = [
-  { label: "Classic (< 1970)", value: "classic" },
-  { label: "70s & 80s (70-89)", value: "70s_80s" },
-  { label: "90s & 00s (90-09)", value: "90s_00s" },
-  { label: "Modern (2010+)", value: "modern" },
-];
-
-const moodOptions = [
-  { label: "Feelgood", value: "feelgood" },
-  { label: "Heartfelt", value: "heartfelt" },
-  { label: "Dark", value: "dark" },
-  { label: "Suspense", value: "suspense" },
-  { label: "Intense", value: "intense" },
-  { label: "Thoughtful", value: "thoughtful" },
-  { label: "Epic", value: "epic" },
-  { label: "Sci-Fi", value: "sci-fi" },
-];
-
-const durationOptions = [
-  { label: "Short (< 90min)", value: "kort" },
-  { label: "Medium (90-120min)", value: "mellan" },
-  { label: "Long (> 120min)", value: "lång" },
-];
-
-
-// --- HELPER: Berikar TMDB-filmer med IMDb-betyg (för discovery) ---
-async function enrichMoviesWithImdb(movies: any[]): Promise<DisplayMovie[]> {
-  const tmdbKey = import.meta.env.VITE_TMDB_KEY;
-  const omdbKey = import.meta.env.VITE_OMDB_KEY;
-  
-  if (!tmdbKey || !omdbKey) {
-      return movies.map(m => ({
-          id: m.id, title: m.title, poster_path: m.poster_path, release_date: m.release_date || "N/A"
-      }));
-  }
-
-  const enriched = await Promise.all(
-    movies.map(async (movie) => {
-      try {
-        const idRes = await fetch(`${TMDB_BASE_URL}/movie/${movie.id}/external_ids?api_key=${tmdbKey}`);
-        const idData = await idRes.json();
-        
-        let imdbRating: string | undefined;
-        if (idData.imdb_id) {
-          const omdbRes = await fetch(`${OMDb_BASE_URL}?apikey=${omdbKey}&i=${idData.imdb_id}`);
-          const omdbData = await omdbRes.json();
-          imdbRating = omdbData.imdbRating !== "N/A" ? omdbData.imdbRating : undefined;
-        }
-
-        return { 
-          id: movie.id,
-          title: movie.title, 
-          poster_path: movie.poster_path, 
-          release_date: movie.release_date || "N/A", 
-          imdbRating,
-        };
-      } catch (e) {
-        return { 
-          id: movie.id,
-          title: movie.title, 
-          poster_path: movie.poster_path, 
-          release_date: movie.release_date || "N/A", 
-        };
-      }
-    })
-  );
-  return enriched.filter(m => m.poster_path); 
-}
-
-// Helper function for TMDB
+// ─── API HELPERS ──────────────────────────────────────────────────────────────
 async function fetchTMDB(endpoint: string, params: Record<string, string> = {}) {
-  const key = import.meta.env.VITE_TMDB_KEY;
-  if (!key) {
-    console.error("Missing VITE_TMDB_KEY in .env");
-    return { results: [] };
-  }
-  const query = new URLSearchParams({ api_key: key, ...params }).toString();
-  const res = await fetch(`${TMDB_BASE_URL}${endpoint}?${query}`);
+  const key = (import.meta as any).env.VITE_TMDB_KEY;
+  if (!key) return { results: [] };
+  const q = new URLSearchParams({ api_key: key, ...params }).toString();
+  const res = await fetch(`${TMDB}${endpoint}?${q}`);
   return res.json();
 }
 
-// {NY} - Stegvis Väljare-komponent
-// ---------------------------------
-type ChoiceOption = { label: string; value: string };
-
-const choiceContainerVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { staggerChildren: 0.05, delayChildren: 0.1 }
-  },
-  exit: { 
-    opacity: 0, 
-    y: -10,
-    transition: { duration: 0.2 }
-  }
-};
-
-const choiceVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0 },
-  hover: { 
-    scale: 1.03, 
-    backgroundColor: '#000000', 
-    color: '#f5f3f0',
-    transition: { type: "spring" as const, stiffness: 400, damping: 15 }
-  },
-  tap: { scale: 0.98 }
-};
-
-function ChoiceSelector({ title, options, onSelect }: {
-  title: string;
-  options: ChoiceOption[];
-  onSelect: (value: string) => void;
-}) {
-  return (
-    <motion.div
-      key={title} // Viktig för AnimatePresence
-      variants={choiceContainerVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      className="w-full"
-    >
-      <h3 className="text-base font-mono uppercase tracking-widest text-neutral-500 mb-6 text-center">
-        {title}
-      </h3>
-      {/* Använder grid för en snygg, responsiv uppradning */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {options.map(opt => (
-          <motion.button
-            key={opt.value}
-            variants={choiceVariants}
-            whileHover="hover"
-            whileTap="tap"
-            onClick={() => onSelect(opt.value)}
-            className="bg-transparent border border-neutral-300 rounded-sm py-4 px-4 text-sm font-bold uppercase text-black cursor-pointer shadow-sm text-center"
-          >
-            {opt.label}
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-// ---------------------------------
-// {SLUT PÅ NY KOMPONENT}
-
-
-export default function Movies() {
-  // State
-  const [movies, setMovies] = useState<DisplayMovie[]>([]); 
-  const [loading, setLoading] = useState(false); 
-  const [searchQ, setSearchQ] = useState("");
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [currentHeroImage, setCurrentHeroImage] = useState(0);
-
-  // Filter State
-  const [era, setEra] =useState<string | null>(null);
-  const [mood, setMood] = useState<string | null>(null);
-  const [duration, setDuration] = useState<string | null>(null); 
-  
-  const moviePlaceholders = [
-    "/placeholder1.jpg", "/placeholder2.jpg", "/placeholder3.jpg", "/placeholder4.jpg"
-  ];
-  
-  // Funktioner för länk/poster-URL
-  const getLinkID = (movie: DisplayMovie) => movie.id;
-  const getPosterUrl = (movie: DisplayMovie) => 
-      movie.poster_path?.startsWith('http') ? movie.poster_path : IMG_BASE_URL + movie.poster_path;
-
-  // Alla 3 filter måste vara valda
-  const allFiltersSelected = era !== null && mood !== null && duration !== null;
-  const hasSearched = searchQ.trim() !== "" || searchError !== null;
-
-
-  // Återställningsfunktion (rensar state)
-  const clearFiltersAndMovies = () => {
-    setLoading(false);
-    setSearchQ(""); 
-    setSearchError(null); 
-    setEra(null); setMood(null); setDuration(null);
-    setMovies([]); // Rensa filmlistan
-  };
-  
-  // Timer för Hero-bakgrunden
-  useEffect(() => {
-    const interval = setInterval(() => {
-        setCurrentHeroImage(prev => (prev + 1) % moviePlaceholders.length);
-    }, 8000); 
-    return () => clearInterval(interval);
-  }, []);
-
-  // 2. Filter Logic (TMDB + Kombinerad Filtrering)
-  useEffect(() => {
-    if (allFiltersSelected) {
-      
-      const runDiscovery = async () => {
-        setLoading(true);
-        setSearchQ(""); setSearchError(null); // Rensa sökning när man filtrerar
-
-        const params: Record<string, string> = {
-          sort_by: "vote_average.desc",
-          "vote_count.gte": "1000",
-          page: "1",
-          language: "en-US",
-          include_adult: "false",
-        };
-
-        if (era === "classic") { params["primary_release_date.lte"] = "1969-12-31"; }
-        else if (era === "70s_80s") { params["primary_release_date.gte"] = "1970-01-01"; params["primary_release_date.lte"] = "1989-12-31"; }
-        else if (era === "90s_00s") { params["primary_release_date.gte"] = "1990-01-01"; params["primary_release_date.lte"] = "2009-12-31"; }
-        else if (era === "modern") { params["primary_release_date.gte"] = "2010-01-01"; }
-
-        // {ÄNDRAD} - Justerad logik för att tillåta filmer som "Harakiri"
-        // Genrer: 35(Com), 10751(Fam), 16(Anim), 18(Dra), 10749(Rom), 27(Hor), 80(Cri), 53(Thr), 9648(Mys), 28(Act), 10752(War), 36(His), 99(Doc), 12(Adv), 14(Fan), 878(Sci)
-        const moodRules: Record<string, { include: string, exclude?: string }> = {
-          "feelgood":   { include: "35|10751|16", exclude: "27|80|53|10752|9648" }, // Komedi/Fam/Anim, MEN INTE Mörka/Intensiva genrer
-          "heartfelt":  { include: "18|10749", exclude: "27|53|10752" }, // Drama/Romantik, MEN INTE Skräck/Thriller/Krig
-          "dark":       { include: "27|80" }, // Skräck ELLER Kriminal
-          "suspense":   { include: "53|9648" }, // Thriller ELLER Mysterium
-          "intense":    { include: "28|10752" }, // Action ELLER Krig
-          "thoughtful": { include: "18|36|99", exclude: "10749|53" }, // Drama/Historia/Doku, MEN INTE Romantik/Thriller
-          "epic":       { include: "12|14" }, // Äventyr ELLER Fantasy
-          "sci-fi":     { include: "878" }, // Endast Sci-Fi
-        };
-        
-        if (mood && moodRules[mood]) {
-          params["with_genres"] = moodRules[mood].include;
-          if (moodRules[mood].exclude) {
-            params["without_genres"] = moodRules[mood].exclude;
+async function enrichWithIMDB(movies: any[]): Promise<DisplayMovie[]> {
+  const tmdbKey = (import.meta as any).env.VITE_TMDB_KEY;
+  const omdbKey = (import.meta as any).env.VITE_OMDB_KEY;
+  return Promise.all(
+    movies.map(async (m) => {
+      try {
+        if (tmdbKey && omdbKey) {
+          const idRes = await fetch(`${TMDB}/movie/${m.id}/external_ids?api_key=${tmdbKey}`);
+          const idData = await idRes.json();
+          if (idData.imdb_id) {
+            const omRes = await fetch(`${OMDB}?apikey=${omdbKey}&i=${idData.imdb_id}`);
+            const omData = await omRes.json();
+            if (omData.imdbRating && omData.imdbRating !== "N/A") {
+              return { id: m.id, title: m.title, poster_path: m.poster_path, release_date: m.release_date, imdbRating: omData.imdbRating };
+            }
           }
         }
-        // {SLUT PÅ ÄNDRING}
-        
-        if (duration === "kort") { params["with_runtime.lte"] = "90"; }
-        else if (duration === "mellan") { params["with_runtime.gte"] = "90"; params["with_runtime.lte"] = "120"; }
-        else if (duration === "lång") { params["with_runtime.gte"] = "120"; }
-        
-        try {
-          const data = await fetchTMDB("/discover/movie", params);
-          if (data.results && data.results.length > 0) {
-            const top4 = data.results.slice(0, 4);
-            const withImdb = await enrichMoviesWithImdb(top4); 
-            setMovies(withImdb);
-          } else {
-            setMovies([]); // Inga resultat
-          }
-        } catch (e) { console.error(e); setMovies([]); }
-        finally { setLoading(false); }
+      } catch {}
+      return { id: m.id, title: m.title, poster_path: m.poster_path, release_date: m.release_date };
+    })
+  );
+}
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+export default function Movies() {
+  const [selections, setSelections] = useState<Partial<Record<StepKey, string>>>({});
+  const [movies,     setMovies]     = useState<DisplayMovie[]>([]);
+  const [loading,    setLoading]    = useState(false);
+  const [searchQ,    setSearchQ]    = useState("");
+  const [searchErr,  setSearchErr]  = useState<string | null>(null);
+  const [mode,       setMode]       = useState<"filter" | "search" | "idle">("idle");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const currentStep = STEPS.find(s => !selections[s.key as StepKey]);
+  const allSelected = STEPS.every(s => selections[s.key as StepKey]);
+
+  // ── Discovery ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!allSelected) return;
+    const { era, mood, duration } = selections;
+    setMode("filter");
+    setLoading(true);
+    setSearchErr(null);
+
+    const run = async () => {
+      const params: Record<string, string> = {
+        sort_by: "vote_average.desc",
+        "vote_count.gte": "800",
+        page: "1",
+        language: "en-US",
+        include_adult: "false",
       };
-
-      const t = setTimeout(runDiscovery, 100);
-      return () => clearTimeout(t);
-
-    } else {
-      if (!hasSearched) {
-        setMovies([]);
-        setSearchError(null);
+      if (era === "classic")  { params["primary_release_date.lte"] = "1969-12-31"; }
+      if (era === "70s_80s")  { params["primary_release_date.gte"] = "1970-01-01"; params["primary_release_date.lte"] = "1989-12-31"; }
+      if (era === "90s_00s")  { params["primary_release_date.gte"] = "1990-01-01"; params["primary_release_date.lte"] = "2009-12-31"; }
+      if (era === "modern")   { params["primary_release_date.gte"] = "2010-01-01"; }
+      if (duration === "short")  { params["with_runtime.lte"] = "90"; }
+      if (duration === "medium") { params["with_runtime.gte"] = "90"; params["with_runtime.lte"] = "120"; }
+      if (duration === "long")   { params["with_runtime.gte"] = "120"; }
+      if (mood && GENRE_MAP[mood]) {
+        params["with_genres"]    = GENRE_MAP[mood].include;
+        if (GENRE_MAP[mood].exclude) params["without_genres"] = GENRE_MAP[mood].exclude!;
       }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [era, mood, duration]); 
+      try {
+        const data = await fetchTMDB("/discover/movie", params);
+        const top4 = (data.results || []).slice(0, 4);
+        const enriched = await enrichWithIMDB(top4);
+        setMovies(enriched.filter(m => m.poster_path));
+      } catch { setMovies([]); }
+      setLoading(false);
+    };
+    run();
+  }, [allSelected, JSON.stringify(selections)]);
 
-  // 3. Search Logic (SNABB OMDb-sökning)
+  // ── Search ─────────────────────────────────────────────────────────────────
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQ.trim()) return;
-    
+    setMode("search");
+    setSelections({});
     setLoading(true);
-    setEra(null); setMood(null); setDuration(null); 
-    
-    const omdbKey = import.meta.env.VITE_OMDB_KEY;
-
+    setSearchErr(null);
+    const key = (import.meta as any).env.VITE_OMDB_KEY;
     try {
-        const res = await fetch(`${OMDb_BASE_URL}?apikey=${omdbKey}&s=${searchQ}`);
-        const data = await res.json();
-        
-        if (data.Response === "True" && data.Search) {
-            const mappedResults: DisplayMovie[] = data.Search.slice(0, 4).map((m: any) => ({
-                id: m.imdbID, 
-                title: m.Title,
-                poster_path: m.Poster === "N/A" ? "" : m.Poster, 
-                release_date: m.Year, 
-            }));
-            setMovies(mappedResults.filter(m => m.poster_path));
-            setSearchError(null);
-        } else {
-            setMovies([]);
-            setSearchError(`No results found for "${searchQ}"`);
-        }
-    } catch (e) { 
-        console.error("OMDb Search Error:", e);
-        setMovies([]);
-        setSearchError("Search failed due to an error.");
-    } finally { 
-        setLoading(false); 
-    }
+      const res = await fetch(`${OMDB}?apikey=${key}&s=${encodeURIComponent(searchQ)}`);
+      const data = await res.json();
+      if (data.Response === "True") {
+        const mapped: DisplayMovie[] = data.Search.slice(0, 4).map((m: any) => ({
+          id: m.imdbID, title: m.Title,
+          poster_path: m.Poster === "N/A" ? "" : m.Poster,
+          release_date: m.Year,
+        }));
+        setMovies(mapped.filter(m => m.poster_path));
+      } else {
+        setMovies([]); setSearchErr(`No results for "${searchQ}"`);
+      }
+    } catch { setMovies([]); setSearchErr("Search failed."); }
+    setLoading(false);
   };
 
-  // Reset
-  const resetAll = () => {
-    clearFiltersAndMovies(); 
+  // ── Reset ──────────────────────────────────────────────────────────────────
+  const reset = () => {
+    setSelections({}); setMovies([]); setSearchQ("");
+    setSearchErr(null); setMode("idle"); setLoading(false);
   };
-  
-  const currentTitle = allFiltersSelected ? 
-                       `Your Curator Match` :
-                       searchQ ? `Search Results for "${searchQ}"` : ""; 
 
-  // --- RENDERING ---
+  const select = (key: StepKey, value: string) => {
+    setSelections(prev => ({ ...prev, [key]: value }));
+  };
+
+  const getPosterUrl = (m: DisplayMovie) =>
+    m.poster_path?.startsWith("http") ? m.poster_path : IMG + m.poster_path;
+
+  const getLinkID = (m: DisplayMovie) => m.id;
+
+  // ─── RENDER ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-dvh bg-[#f5f3f0] text-black font-sans overflow-x-hidden">
-      
-      <section className="min-h-dvh relative bg-[#f5f3f0] flex flex-col">
-        
-        <div 
-            className="absolute inset-0 z-0 transition-opacity duration-1000 ease-in-out" 
-            style={{ 
-                backgroundImage: `url(${moviePlaceholders[currentHeroImage]})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                filter: 'grayscale(80%) blur(2px) brightness(0.95)',
-                transform: 'scale(1.02)'
-            }}
-        />
-        
-        <div className="relative z-10 w-full flex flex-col">
+    <div className="min-h-dvh bg-[#0a0a0a] text-white font-sans overflow-x-hidden">
 
-            {/* Topp-innehåll (Marquee, Subtitle, Filter, Resultat) */}
-            <div>
-                <div className="w-full overflow-hidden">
-                    <div className="flex whitespace-nowrap animate-marquee">
-                        <span className="text-8xl md:text-[14rem] font-bold tracking-tighter leading-[0.8] text-black">
-                            The Movie Index&nbsp;—&nbsp;
-                        </span>
-                        <span className="text-8xl md:text-[14rem] font-bold tracking-tighter leading-[0.8] text-black">
-                            The Movie Index&nbsp;—&nbsp;
-                        </span>
-                        <span className="text-8xl md:text-[14rem] font-bold tracking-tighter leading-[0.8] text-black">
-                            The Movie Index&nbsp;—&nbsp;
-                        </span>
-                        <span className="text-8xl md:text-[14rem] font-bold tracking-tighter leading-[0.8] text-black">
-                            The Movie Index&nbsp;—&nbsp;
-                        </span>
-                    </div>
-                </div>
-                
-                <div className="w-full px-6 md:px-12 lg:px-20 mt-4 md:mt-2 pb-20">
-                    <p className="text-xl md:text-2xl font-light max-w-2xl text-neutral-600 drop-shadow">
-                        The minimalist digital library of cinematic history. Powered with OMDB & TMDB.
-                    </p>
-
-                    {/* Filtersektionen */}
-                    <section id="filter-section" className="w-full max-w-7xl mt-10 md:mt-16 mx-auto">
-                      
-                      <h2 className="text-5xl md:text-6xl font-bold leading-[0.9] tracking-tight text-black mb-10">
-                        What to watch
-                      </h2>
-
-                      {/* Rad 1: Sök & Reset */}
-                      <div className="flex flex-col md:flex-row gap-6 justify-between items-start">
-                          <form onSubmit={handleSearch} className="relative flex-1 w-full">
-                              <input 
-                                type="text" 
-                                placeholder="SEARCH BY TITLE (E.G. 'THE MATRIX')" 
-                                value={searchQ}
-                                onChange={e => setSearchQ(e.target.value)}
-                                className="w-full bg-transparent border-b-2 border-neutral-300 pb-2 text-xl font-medium text-black placeholder-neutral-500/80 focus:outline-none focus:border-black uppercase transition-colors tracking-wider"
-                              />
-                              <button type="submit" className="absolute right-0 bottom-2 text-neutral-500 hover:text-black font-bold text-2xl">→</button>
-                          </form>
-                          <button 
-                            onClick={resetAll} 
-                            className="text-xs font-mono uppercase tracking-widest text-neutral-500 hover:text-black text-left md:text-right flex-shrink-0 flex items-center md:justify-end gap-2 group transition-colors"
-                          >
-                            <span className={`block w-2 h-2 rounded-full transition-colors ${allFiltersSelected || searchQ ? 'bg-black' : 'bg-neutral-300'}`}></span>
-                            Reset / Clear
-                          </button>
-                      </div>
-
-                      {/* Sektion för att visa valda filter och tillåta "gå tillbaka" */}
-                      <div className="flex flex-wrap gap-2 sm:gap-4 mt-10 min-h-[2.5rem]">
-                        {era && (
-                          <motion.button
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={() => { setEra(null); setMood(null); setDuration(null); }} 
-                            className="bg-black text-white py-2 px-4 rounded-full text-xs font-mono uppercase tracking-widest hover:bg-neutral-700 transition-colors"
-                          >
-                            Era: {eraOptions.find(o => o.value === era)?.label} <span className="ml-2 opacity-50">X</span>
-                          </motion.button>
-                        )}
-                        {mood && (
-                          <motion.button
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={() => { setMood(null); setDuration(null); }} 
-                            className="bg-black text-white py-2 px-4 rounded-full text-xs font-mono uppercase tracking-widest hover:bg-neutral-700 transition-colors"
-                          >
-                            Mood: {moodOptions.find(o => o.value === mood)?.label} <span className="ml-2 opacity-50">X</span>
-                          </motion.button> 
-                        )}
-                      </div>
-
-                      {/* Stegvis "Choice"-väljare */}
-                      <div className="w-full mt-4 md:mt-8 min-h-[12rem] relative">
-                        <AnimatePresence mode="wait">
-                          {/* Steg 1: Välj Era */}
-                          {!era && (
-                            <ChoiceSelector
-                              key="era"
-                              title="Step 1: Pick an Era"
-                              options={eraOptions}
-                              onSelect={setEra}
-                            />
-                          )}
-
-                          {/* Steg 2: Välj Mood */}
-                          {era && !mood && (
-                            <ChoiceSelector
-                              key="mood"
-                              title="Step 2: Pick a Mood"
-                              options={moodOptions}
-                              onSelect={setMood}
-                            />
-                          )}
-
-                          {/* Steg 3: Välj Duration */}
-                          {era && mood && !duration && (
-                            <ChoiceSelector
-                              key="duration"
-                              title="Step 3: Pick a Duration"
-                              options={durationOptions}
-                              onSelect={setDuration}
-                            />
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      {searchError && <p className="text-red-500 text-xs mt-4 text-center font-mono">{searchError}</p>}
-                    </section>
-
-                    {/* Rubrik visas bara om den har innehåll */}
-                    {currentTitle && (
-                      <div className="max-w-7xl mx-auto mt-10 md:mt-16">
-                          <h3 className="text-4xl md:text-5xl font-bold leading-[0.9] tracking-tight text-black">
-                              {currentTitle}
-                          </h3>
-                      </div>
-                    )}
-                    
-                    <div className="w-full max-w-7xl mx-auto mt-10">
-                      
-                      <AnimatePresence mode="wait">
-                        
-                        {/* 1. Loading State */}
-                        {loading && (
-                          <motion.div 
-                            key="loading" 
-                            variants={fadeVariant}
-                            initial="hidden"
-                            animate="visible"
-                            exit="exit"
-                            className="grid grid-cols-2 md:grid-cols-4 gap-4"
-                          >
-                            {Array.from({length:4}).map((_, i) => (
-                              <div key={i} className="bg-neutral-200 animate-pulse aspect-[2/3] border border-neutral-300" />
-                            ))}
-                          </motion.div>
-                        )}
-
-                        {/* 2. Results State */}
-                        {!loading && movies.length > 0 && (
-                          <motion.div 
-                            key="results"
-                            variants={gridVariants} 
-                            initial="hidden"
-                            animate="visible"
-                            exit="hidden"
-                            className="grid grid-cols-2 md:grid-cols-4 gap-4"
-                          >
-                            {movies.map((movie) => (
-                              <MotionLink 
-                                variants={cardVariants} 
-                                to={`/movie/${getLinkID(movie)}`} 
-                                key={getLinkID(movie)} 
-                                className="group relative bg-neutral-200 aspect-[2/3] overflow-hidden block border border-neutral-300 transition-colors hover:border-black"
-                              >
-                                {/* Poster */}
-                                {movie.poster_path && movie.poster_path !== "N/A" ? (
-                                  <motion.img 
-                                    src={getPosterUrl(movie)} 
-                                    alt={movie.title} 
-                                    className="w-full h-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-neutral-400 font-black text-4xl bg-neutral-200">?</div>
-                                )}
-                                
-                                {/* Info Overlay */}
-                                <div className="absolute bottom-0 inset-x-0 p-2 bg-[#f5f3f0]/80 backdrop-blur-[2px] border-t border-neutral-400/50">
-                                  <h2 className="text-sm font-medium leading-tight uppercase text-black truncate">
-                                    {movie.title}
-                                  </h2>
-                                  <div className="flex justify-between items-center mt-1">
-                                      <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-600">
-                                        {movie.release_date?.split("-")[0]}
-                                      </span>
-                                      {movie.imdbRating && (
-                                        <span className="text-[10px] font-mono uppercase tracking-widest text-white bg-black px-1 font-bold">
-                                            {movie.imdbRating}
-                                        </span>
-                                      )}
-                                  </div>
-                                </div>
-                              </MotionLink>
-                            ))}
-                          </motion.div>
-                        )}
-
-                        {/* 3. Empty State (visas bara om man sökt/filtrerat fullständigt) */}
-                        {!loading && movies.length === 0 && (allFiltersSelected || searchError) && (
-                          <motion.div
-                            key="no-matches"
-                            variants={fadeVariant}
-                            initial="hidden"
-                            animate="visible"
-                            exit="exit"
-                            className="flex items-center justify-center bg-neutral-200/50 text-neutral-500 font-mono uppercase tracking-widest min-h-[50vh] rounded-none border border-neutral-300"
-                          >
-                            NO MATCHES FOUND
-                          </motion.div>
-                        )}
-                      
-                      </AnimatePresence>
-                    </div>
-                </div>
-            </div>
-
-            <div className="relative z-10 w-full px-6 md:px-12 lg:px-20 pb-6 text-sm font-mono tracking-widest text-neutral-500 flex justify-between items-end mt-auto">
-                <span>SCROLL DOWN</span>
-                <div className="h-10 w-px bg-neutral-400 animate-pulse hidden md:block" />
-            </div>
+      {/* ── HEADER ─────────────────────────────────────────────────── */}
+      <header className="border-b border-white/10 px-6 md:px-12 py-5 flex items-center justify-between sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono tracking-[0.25em] text-white/40 uppercase">Film Index</span>
+          <span className="text-white/20">·</span>
+          <span className="text-xs font-mono text-white/25 tracking-wider">OMDB + TMDB</span>
         </div>
+        {(mode !== "idle") && (
+          <button onClick={reset} className="text-xs font-mono tracking-[0.2em] text-white/40 hover:text-white transition-colors uppercase">
+            ← Start over
+          </button>
+        )}
+      </header>
+
+      {/* ── HERO TITLE ─────────────────────────────────────────────── */}
+      <section className="px-6 md:px-12 pt-16 pb-10 border-b border-white/10">
+        <h1
+          className="font-black uppercase leading-[0.88] tracking-[-0.03em] text-white"
+          style={{ fontSize: "clamp(3.5rem, 11vw, 9rem)" }}
+        >
+          Find Your<br />
+          <span className="text-white/20">Next Film</span>
+        </h1>
+        <p className="mt-6 text-white/40 text-sm font-mono tracking-wider max-w-md">
+          Three filters. Four results. No noise. Powered by OMDB &amp; TMDB APIs.
+        </p>
       </section>
+
+      {/* ── SEARCH BAR ─────────────────────────────────────────────── */}
+      <section className="px-6 md:px-12 py-8 border-b border-white/10">
+        <form onSubmit={handleSearch} className="flex items-center gap-4">
+          <input
+            ref={inputRef}
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            placeholder="Search by title…"
+            className="flex-1 bg-transparent text-white text-lg md:text-xl font-light placeholder-white/20 focus:outline-none border-b border-white/20 focus:border-white/60 pb-2 transition-colors"
+          />
+          <button
+            type="submit"
+            className="text-white/40 hover:text-white transition-colors text-2xl font-light"
+          >
+            →
+          </button>
+        </form>
+        {searchErr && <p className="mt-3 text-red-400 text-xs font-mono">{searchErr}</p>}
+      </section>
+
+      {/* ── STEP FILTER ────────────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {mode !== "search" && !allSelected && currentStep && (
+          <motion.section
+            key={currentStep.key}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+            className="px-6 md:px-12 py-12 border-b border-white/10"
+          >
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-4 mb-10">
+              {STEPS.map((s, i) => {
+                const done = !!selections[s.key as StepKey];
+                const current = s.key === currentStep.key;
+                return (
+                  <div key={s.key} className="flex items-center gap-4">
+                    <div className={`flex items-center gap-2 transition-all ${current ? "opacity-100" : done ? "opacity-60" : "opacity-20"}`}>
+                      <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-mono transition-all ${done ? "bg-white border-white text-black" : current ? "border-white/80 text-white" : "border-white/20 text-white/20"}`}>
+                        {done ? "✓" : i + 1}
+                      </span>
+                      <span className="text-[10px] font-mono tracking-[0.2em] uppercase hidden sm:block text-white/60">
+                        {s.key}
+                      </span>
+                    </div>
+                    {i < STEPS.length - 1 && <span className="text-white/15 text-xs">─</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Question */}
+            <div className="mb-8">
+              <span className="text-[10px] font-mono text-white/30 tracking-[0.25em] uppercase block mb-2">
+                {currentStep.label}
+              </span>
+              <h2 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                {currentStep.question}
+              </h2>
+            </div>
+
+            {/* Options */}
+            <div className="flex flex-wrap gap-3">
+              {currentStep.options.map((opt) => (
+                <motion.button
+                  key={opt.value}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => select(currentStep.key as StepKey, opt.value)}
+                  className="group flex flex-col items-start px-5 py-4 border border-white/15 hover:border-white/70 hover:bg-white hover:text-black transition-all duration-200 rounded-sm text-left min-w-[120px]"
+                >
+                  <span className="text-sm font-bold uppercase tracking-wide leading-tight">
+                    {opt.label}
+                  </span>
+                  <span className="text-[10px] font-mono text-white/40 group-hover:text-black/50 mt-1 transition-colors">
+                    {opt.sub}
+                  </span>
+                </motion.button>
+              ))}
+            </div>
+
+            {/* Show chosen filters so far */}
+            {Object.keys(selections).length > 0 && (
+              <div className="mt-8 flex flex-wrap gap-2">
+                {STEPS.filter(s => selections[s.key as StepKey]).map(s => {
+                  const val = selections[s.key as StepKey];
+                  const opt = s.options.find(o => o.value === val);
+                  return (
+                    <span key={s.key} className="text-[10px] font-mono uppercase tracking-wider bg-white/10 text-white/60 px-3 py-1.5 rounded-full">
+                      {s.key}: {opt?.label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* ── RESULTS ────────────────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {/* Loading skeletons */}
+        {loading && (
+          <motion.section
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-6 md:px-12 py-12"
+          >
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[0,1,2,3].map(i => (
+                <div key={i} className="aspect-[2/3] bg-white/5 animate-pulse rounded-sm" style={{ animationDelay: `${i * 80}ms` }} />
+              ))}
+            </div>
+          </motion.section>
+        )}
+
+        {/* Movies grid */}
+        {!loading && movies.length > 0 && (
+          <motion.section
+            key="results"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-6 md:px-12 py-12"
+          >
+            {/* Result header */}
+            <div className="mb-6 flex items-baseline justify-between">
+              <div>
+                {allSelected && (
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {STEPS.map(s => {
+                      const val = selections[s.key as StepKey];
+                      const opt = s.options.find(o => o.value === val);
+                      return val ? (
+                        <span key={s.key} className="text-[10px] font-mono uppercase tracking-wider border border-white/20 text-white/50 px-2 py-1 rounded-sm">
+                          {opt?.label}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+                {mode === "search" && (
+                  <p className="text-white/40 text-xs font-mono mb-3 tracking-wider uppercase">
+                    Search: "{searchQ}"
+                  </p>
+                )}
+                <span className="text-xs font-mono text-white/25 tracking-[0.2em] uppercase">
+                  {movies.length} result{movies.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {movies.map((m, i) => (
+                <motion.div
+                  key={m.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.07 }}
+                >
+                  <Link
+                    to={`/movie/${getLinkID(m)}`}
+                    className="group block relative aspect-[2/3] overflow-hidden rounded-sm bg-white/5"
+                  >
+                    {/* Poster */}
+                    <img
+                      src={getPosterUrl(m)}
+                      alt={m.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+
+                    {/* Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                    {/* Info */}
+                    <div className="absolute inset-x-0 bottom-0 p-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
+                      <p className="text-white text-sm font-bold leading-tight line-clamp-2">{m.title}</p>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-white/50 text-[10px] font-mono">{m.release_date?.split("-")[0]}</span>
+                        {m.imdbRating && (
+                          <span className="text-[10px] font-mono bg-yellow-400 text-black px-1.5 py-0.5 rounded-sm font-bold">
+                            ★ {m.imdbRating}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Index number */}
+                    <div className="absolute top-3 left-3 text-[9px] font-mono text-white/30 bg-black/40 px-1.5 py-0.5 rounded-sm">
+                      {String(i + 1).padStart(2, "0")}
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Call to action */}
+            <p className="mt-8 text-center text-white/20 text-xs font-mono tracking-wider">
+              Click a poster to open the film viewer →
+            </p>
+          </motion.section>
+        )}
+
+        {/* Empty state */}
+        {!loading && movies.length === 0 && mode !== "idle" && !currentStep && (
+          <motion.section
+            key="empty"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-6 md:px-12 py-24 text-center"
+          >
+            <p className="text-white/20 text-sm font-mono uppercase tracking-widest">
+              No matches found for this combination.
+            </p>
+            <button onClick={reset} className="mt-6 text-xs font-mono text-white/40 hover:text-white underline underline-offset-4 transition-colors">
+              Try different filters
+            </button>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* ── HOW IT WORKS (idle state, educational) ─────────────────── */}
+      <AnimatePresence>
+        {mode === "idle" && (
+          <motion.section
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-6 md:px-12 py-16 mt-4 border-t border-white/10"
+          >
+            <h3 className="text-[10px] font-mono text-white/25 tracking-[0.3em] uppercase mb-10">
+              How it works
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[
+                {
+                  step: "01",
+                  title: "You filter",
+                  desc: "Choose an era, a mood, and how long you have. Three questions, zero noise.",
+                  api: null,
+                },
+                {
+                  step: "02",
+                  title: "TMDB discovers",
+                  desc: "The Movie Database API finds films matching your criteria using genre IDs, runtime filters, and release dates.",
+                  api: "TMDB /discover/movie",
+                },
+                {
+                  step: "03",
+                  title: "OMDB enriches",
+                  desc: "Each result gets IMDb ratings fetched from OMDB, adding a trusted quality signal alongside the TMDB data.",
+                  api: "OMDB /?i={imdb_id}",
+                },
+              ].map(card => (
+                <div key={card.step} className="border border-white/8 rounded-sm p-6">
+                  <span className="text-[10px] font-mono text-white/20 tracking-[0.3em]">{card.step}</span>
+                  <h4 className="mt-3 text-lg font-bold text-white/70">{card.title}</h4>
+                  <p className="mt-2 text-white/35 text-sm leading-relaxed">{card.desc}</p>
+                  {card.api && (
+                    <code className="mt-4 block text-[10px] font-mono text-emerald-400/60 bg-emerald-950/30 px-3 py-2 rounded-sm">
+                      {card.api}
+                    </code>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-16 border-t border-white/8 pt-10">
+              <h3 className="text-[10px] font-mono text-white/25 tracking-[0.3em] uppercase mb-8">
+                Film detail view
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {[
+                  {
+                    title: "Horizontal strip",
+                    desc: "The film detail page shows TMDB backdrop images in a horizontal scroll strip. Scroll or drag to explore scenes. Images lazy-load with grayscale → colour hover transitions.",
+                  },
+                  {
+                    title: "Info panel",
+                    desc: "Toggle between the cinematic strip and an info panel that shows the tagline, synopsis, director, cast, runtime, and genres — all fetched live from TMDB.",
+                  },
+                ].map(f => (
+                  <div key={f.title} className="flex gap-4">
+                    <div className="flex-shrink-0 w-px bg-white/15 self-stretch" />
+                    <div>
+                      <h4 className="text-sm font-bold text-white/60">{f.title}</h4>
+                      <p className="mt-2 text-white/30 text-sm leading-relaxed">{f.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* ── FOOTER ─────────────────────────────────────────────────── */}
+      <footer className="border-t border-white/8 px-6 md:px-12 py-6 flex items-center justify-between">
+        <span className="text-[10px] font-mono text-white/20 tracking-wider uppercase">Film Index</span>
+        <div className="flex items-center gap-6">
+          <span className="text-[10px] font-mono text-white/15">TMDB</span>
+          <span className="text-white/10">·</span>
+          <span className="text-[10px] font-mono text-white/15">OMDB</span>
+          <span className="text-white/10">·</span>
+          <span className="text-[10px] font-mono text-white/15">React + Framer Motion</span>
+        </div>
+      </footer>
+
     </div>
   );
 }
