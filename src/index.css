@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 html, body, #root {
@@ -9,25 +9,29 @@ html, body, #root {
 }
 
 body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
+  background: #0a0a0a;
+  color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-
 
 html, body {
   margin: 0;
   padding: 0;
 }
 
-/* I din globala CSS-fil, t.ex. src/index.css */
+/* Hide scrollbar but keep functionality */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-@layer utilities {
-  @keyframes marquee {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(-100%); }
-  }
+/* Marquee animation */
+@keyframes marquee {
+  0%   { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
 
-  .animate-marquee {
-    /* Du kan justera '30s' för att ändra hastigheten (längre tid = långsammare) */
-    animation: marquee 20s linear infinite;
-  }
+.animate-marquee {
+  animation: marquee 25s linear infinite;
+  display: flex;
+  width: max-content;
 }

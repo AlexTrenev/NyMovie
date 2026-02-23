@@ -1,116 +1,90 @@
-// src/pages/MovieDetails.tsx (STRIP MODE SOM DEFAULT)
+// src/pages/MovieDetails.tsx
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const IMG_FULL_URL = "https://image.tmdb.org/t/p/w1280"; 
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+const TMDB_BASE = "https://api.themoviedb.org/3";
+const IMG_W1280 = "https://image.tmdb.org/t/p/w1280";
+const IMG_W500  = "https://image.tmdb.org/t/p/w500";
+const MAX_SCENES = 6;
 
-const CONTAINER_WIDTH_VW = 55;
-const MAX_IMAGES = 5; 
-
-// --- TYPEDEFINITIONER ---
-type TmdbData = {
-  backdrop_path: string | null;
+// ─── TYPES ─────────────────────────────────────────────────────────────────────
+type MovieData = {
   title: string;
   release_date: string;
   runtime: number;
   genres: { id: number; name: string }[];
   tagline: string;
   overview: string;
+  backdrop_path: string | null;
+  poster_path: string | null;
 };
 
-type TmdbImages = {
-  backdrops: { file_path: string }[];
-  posters: { file_path: string }[];
-  stills: { file_path: string }[];
+type Credits = {
+  director: string;
+  cast: string[];
 };
 
-const DUMMY_MOVIE: TmdbData = {
-  title: "HARAKIRI", 
-  release_date: "1962-09-16",
-  runtime: 135,
-  genres: [
-    { id: 1, name: "ACTION" },
-    { id: 2, name: "DRAMA" },
-    { id: 3, name: "HISTORY" },
-  ],
-  tagline: "The story of an honorable man's final act.",
-  overview:
-    "A ronin arrives at a feudal lord's home, requesting an honorable place to commit seppuku (ritual suicide). The lord, skeptical of the sincerity of these pleas, attempts to persuade the ronin to leave. The two men then engage in a powerful clash of ideologies and honor.",
-  backdrop_path: null,
-};
-
-
-// --- HUVUDKOMPONENT ---
+// ─── MAIN ──────────────────────────────────────────────────────────────────────
 export default function MovieDetails() {
   const { imdbID = "" } = useParams();
 
-  const [movie, setMovie] = useState<TmdbData | null>(DUMMY_MOVIE);
-  const [stills, setStills] = useState<TmdbImages | null>(null);
+  const [movie,   setMovie]   = useState<MovieData | null>(null);
+  const [credits, setCredits] = useState<Credits>({ director: "—", cast: [] });
+  const [scenes,  setScenes]  = useState<{ file_path: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [panel,   setPanel]   = useState<"strip" | "info">("strip");
 
-  // FIX: Sätt 'strip' som default view
-  const [viewMode, setViewMode] = useState<'info' | 'strip'>('strip');
-
-  const [imdbRating] = useState("8.7 / 10"); 
-  const [director] = useState("Masaki Kobayashi"); 
-  const [castList] = useState<string[]>(["Tatsuya Nakadai", "Akira Ishihama", "Shima Iwashita"]); 
-  
+  // Lock body scroll
   useEffect(() => {
-    // Lås body scroll för app-känsla
-    const originalStyle = window.getComputedStyle(document.body).overflow;
+    const orig = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalStyle;
-    };
+    return () => { document.body.style.overflow = orig; };
   }, []);
 
+  // Fetch everything
   useEffect(() => {
     const ac = new AbortController();
-    const tmdbKey = import.meta.env.VITE_TMDB_KEY;
+    const key = (import.meta as any).env.VITE_TMDB_KEY;
 
     (async () => {
       setLoading(true);
-      if (!tmdbKey) setError("TMDB API-nyckel saknas.");
-      else setError(null);
-
       try {
-        const tmdbRes = await fetch(
-          `${TMDB_BASE_URL}/movie/${imdbID}?api_key=${tmdbKey}`,
-          { signal: ac.signal }
-        );
+        // Movie details
+        const [detailRes, imagesRes, creditsRes] = await Promise.all([
+          fetch(`${TMDB_BASE}/movie/${imdbID}?api_key=${key}`, { signal: ac.signal }),
+          fetch(`${TMDB_BASE}/movie/${imdbID}/images?api_key=${key}`, { signal: ac.signal }),
+          fetch(`${TMDB_BASE}/movie/${imdbID}/credits?api_key=${key}`, { signal: ac.signal }),
+        ]);
 
-        if (tmdbRes.ok) {
-          const data = await tmdbRes.json();
-          setMovie((prev) => ({
-            ...prev!,
-            title: data.title || DUMMY_MOVIE.title,
-            release_date: data.release_date || DUMMY_MOVIE.release_date,
-            runtime: data.runtime || DUMMY_MOVIE.runtime,
-            genres: data.genres || DUMMY_MOVIE.genres,
-            tagline: data.tagline || DUMMY_MOVIE.tagline,
-            overview: data.overview || DUMMY_MOVIE.overview,
-            backdrop_path: data.backdrop_path,
-          }));
-        }
-
-        const imagesRes = await fetch(
-          `${TMDB_BASE_URL}/movie/${imdbID}/images?api_key=${tmdbKey}`,
-          { signal: ac.signal }
-        );
-
-        if (imagesRes.ok) {
-          const imgData = await imagesRes.json();
-          setStills({
-            backdrops: imgData.backdrops.slice(0, 20),
-            posters: imgData.posters.slice(0, 20),
-            stills: imgData.stills || [],
+        if (detailRes.ok) {
+          const d = await detailRes.json();
+          setMovie({
+            title: d.title || "Unknown",
+            release_date: d.release_date || "",
+            runtime: d.runtime || 0,
+            genres: d.genres || [],
+            tagline: d.tagline || "",
+            overview: d.overview || "",
+            backdrop_path: d.backdrop_path,
+            poster_path: d.poster_path,
           });
         }
-      } catch (e) {
-        if ((e as Error).name !== "AbortError") setError("Nätverksfel.");
+
+        if (imagesRes.ok) {
+          const img = await imagesRes.json();
+          setScenes((img.backdrops || []).slice(0, MAX_SCENES));
+        }
+
+        if (creditsRes.ok) {
+          const cr = await creditsRes.json();
+          const dir = (cr.crew || []).find((p: any) => p.job === "Director");
+          const top = (cr.cast || []).slice(0, 4).map((p: any) => p.name);
+          setCredits({ director: dir?.name || "—", cast: top });
+        }
+      } catch (e: any) {
+        if (e.name !== "AbortError") console.error(e);
       } finally {
         setLoading(false);
       }
@@ -118,277 +92,312 @@ export default function MovieDetails() {
     return () => ac.abort();
   }, [imdbID]);
 
-  const allImages = (stills?.backdrops || []).slice(0, MAX_IMAGES);
-  const year = movie?.release_date?.split("-")[0] || "N/A";
-  
-  const toggleViewMode = () => {
-    setViewMode(prev => prev === 'info' ? 'strip' : 'info');
-  };
+  const year = movie?.release_date?.split("-")[0] || "—";
 
-  if (loading) return <div className="fixed inset-0 bg-[#f5f3f0]" />;
-  if (!movie) return <div className="fixed inset-0 bg-[#f5f3f0]" />;
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-[#080808] flex items-center justify-center">
+        <div className="text-white/20 text-xs font-mono tracking-[0.3em] uppercase animate-pulse">Loading</div>
+      </div>
+    );
+  }
+
+  if (!movie) {
+    return (
+      <div className="fixed inset-0 bg-[#080808] flex items-center justify-center">
+        <div className="text-white/20 text-xs font-mono">Film not found.</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-[#f5f3f0] font-sans text-black overflow-hidden overscroll-none">
-      
-        {error && (
-            <div className="fixed top-0 left-0 right-0 z-50 bg-red-900/90 text-amber-50 p-2 text-center text-xs font-mono uppercase tracking-wider backdrop-blur-sm">
-                {error}
-            </div>
-        )}
+    <div className="fixed inset-0 bg-[#080808] text-white overflow-hidden">
 
+      {/* ── NAV ─────────────────────────────────────────────────────── */}
+      <nav className="absolute top-0 inset-x-0 z-50 flex items-center justify-between px-6 md:px-10 pt-6 pb-4">
         <Link
-            to="/"
-            className="fixed top-8 left-8 z-50 text-neutral-700 hover:text-neutral-900 transition-colors text-sm"
+          to="/"
+          className="text-[10px] font-mono tracking-[0.25em] uppercase text-white/30 hover:text-white/80 transition-colors flex items-center gap-2"
         >
-            Back
+          <span>←</span> Index
         </Link>
 
-        <button 
-            onClick={toggleViewMode}
-            className="fixed top-8 right-8 z-50 text-neutral-500 hover:text-black transition-colors text-xs font-mono uppercase tracking-widest z-[60] cursor-pointer"
-        >
-            {/* FIX: Uppdaterad logik för knapptext */}
-            {viewMode === 'strip' ? 'View Info' : 'Back to Gallery'}
-        </button>
+        <div className="flex items-center gap-1 border border-white/15 rounded-full p-1">
+          {(["strip", "info"] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setPanel(v)}
+              className={`px-3 py-1 rounded-full text-[9px] font-mono tracking-[0.2em] uppercase transition-all duration-200 ${panel === v ? "bg-white text-black" : "text-white/30 hover:text-white/60"}`}
+            >
+              {v === "strip" ? "Gallery" : "Info"}
+            </button>
+          ))}
+        </div>
+      </nav>
 
-        <AnimatePresence mode="wait">
-            {viewMode === 'info' ? (
-                // INFO VIEW
-                <motion.div 
-                    key="info"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="w-full h-full"
-                >
-                    <InfoView 
-                        movie={movie}
-                        year={year}
-                        imdbRating={imdbRating}
-                        director={director}
-                        castList={castList}
-                        heroImage={allImages.length > 0 ? allImages[0].file_path : null}
-                    />
-                </motion.div>
-            ) : (
-                // STRIP VIEW (Nu Default)
-                <motion.div 
-                    key="strip"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className="w-full h-full"
-                >
-                    <HorizontalScrollStrip 
-                        images={allImages} 
-                        movie={movie} 
-                        year={year} 
-                    />
-                </motion.div>
-            )}
-        </AnimatePresence>
+      {/* ── VIEWS ───────────────────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {panel === "strip" ? (
+          <motion.div
+            key="strip"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+            className="w-full h-full"
+          >
+            <StripView movie={movie} year={year} scenes={scenes} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="info"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.4 }}
+            className="w-full h-full"
+          >
+            <InfoView movie={movie} year={year} credits={credits} scenes={scenes} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// --- KOMPONENT: InfoView ---
-function InfoView({ 
-    movie, 
-    year, 
-    imdbRating, 
-    director, 
-    castList, 
-    heroImage 
-}: { 
-    movie: TmdbData, 
-    year: string, 
-    imdbRating: string, 
-    director: string, 
-    castList: string[], 
-    heroImage: string | null 
-}) {
-    return (
-        <div className="w-full h-full flex flex-col md:flex-row">
-            {/* VÄNSTER: Informativ Text */}
-            <div className="w-full md:w-[60%] h-full p-12 lg:pl-20 lg:pr-16 flex flex-col justify-center overflow-y-auto no-scrollbar">
-                <div className="max-w-2xl">
-                    {/* Header */}
-                    <div className="mb-8">
-                        <div className="flex items-center gap-4 mb-4">
-                            <span className="px-2 py-1 bg-neutral-200 text-[10px] font-bold tracking-widest rounded-sm text-neutral-600">
-                                MOVIE
-                            </span>
-                            <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-[0.15em]">
-                                IMDB: <span className="text-neutral-900 font-semibold">{imdbRating}</span>
-                            </span>
-                        </div>
-                        
-                        <h1 className="text-6xl md:text-7xl lg:text-8xl font-bold leading-[0.9] mb-2 text-neutral-900 tracking-tight">
-                            {movie.title}
-                        </h1>
-                        <div className="text-3xl md:text-4xl text-neutral-400 font-light">
-                            ({year})
-                        </div>
-                    </div>
+// ─── STRIP VIEW ────────────────────────────────────────────────────────────────
+function StripView({ movie, year, scenes }: { movie: MovieData; year: string; scenes: { file_path: string }[] }) {
+  const x = useMotionValue(0);
+  const smoothX = useSpring(x, { stiffness: 180, damping: 38, mass: 0.6 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const constraintsMin = useRef(0);
 
-                    {/* Synopsis */}
-                    <div className="mb-10">
-                        {movie.tagline && (
-                            <p className="text-lg font-medium text-neutral-800 italic mb-4 border-l-2 border-neutral-300 pl-4">
-                                "{movie.tagline}"
-                            </p>
-                        )}
-                        <p className="text-base text-neutral-600 leading-relaxed">
-                            {movie.overview}
-                        </p>
-                    </div>
+  const [loadedCount, setLoadedCount] = useState(0);
+  const imagesReady = loadedCount >= scenes.length && scenes.length > 0;
 
-                    {/* Detaljerat Rutnät */}
-                    <div className="grid grid-cols-2 gap-y-8 gap-x-12 border-t border-neutral-200 pt-8">
-                        <div>
-                            <h3 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Director</h3>
-                            <p className="text-sm font-medium text-neutral-800">{director}</p>
-                        </div>
-                        <div>
-                            <h3 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Runtime</h3>
-                            <p className="text-sm font-medium text-neutral-800">{movie.runtime} MIN</p>
-                        </div>
-                        <div>
-                            <h3 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Cast</h3>
-                            <ul className="text-sm font-medium text-neutral-800 space-y-1">
-                                {castList.map(c => <li key={c}>{c}</li>)}
-                            </ul>
-                        </div>
-                        <div>
-                            <h3 className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Genres</h3>
-                            <div className="flex flex-wrap gap-2">
-                                {movie.genres.map(g => (
-                                    <span key={g.id} className="text-xs border border-neutral-300 px-2 py-1 rounded-full text-neutral-600">
-                                        {g.name}
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  useLayoutEffect(() => {
+    if (!imagesReady || !contentRef.current) return;
+    const cw = contentRef.current.scrollWidth;
+    const vw = window.innerWidth;
+    constraintsMin.current = -(cw - vw + 80);
+  }, [imagesReady, scenes]);
 
-            {/* HÖGER: Hero Bild */}
-            <div className="hidden md:block w-[40%] h-full relative bg-black overflow-hidden">
-                {heroImage ? (
-                    <motion.div 
-                        initial={{ scale: 1.1, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        transition={{ duration: 1.5, ease: "easeOut" }}
-                        className="w-full h-full"
-                    >
-                        <img 
-                            src={`${IMG_FULL_URL}${heroImage}`} 
-                            alt="Movie Cover" 
-                            className="w-full h-full object-cover opacity-90"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-l from-black/20 to-transparent mix-blend-multiply" />
-                    </motion.div>
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-neutral-500">
-                        No Image
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-function HorizontalScrollStrip({ images, movie, year }: { images: { file_path: string }[], movie: TmdbData | null, year: string }) {
-    const x = useMotionValue(0);
-    const smoothX = useSpring(x, { stiffness: 200, damping: 40, mass: 0.5 });
-    const contentRef = useRef<HTMLDivElement>(null);
+  const handleWheel = (e: React.WheelEvent) => {
+    const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
+    let nx = x.get() - delta * 1.4;
+    nx = Math.max(constraintsMin.current, Math.min(0, nx));
+    x.set(nx);
+  };
 
-    const [constraints, setConstraints] = useState({ min: 0, max: 0 });
+  return (
+    <div className="h-full w-full flex flex-col" onWheel={handleWheel}>
 
-    // --- FIX: Track image loading ---
-    const [imagesLoaded, setImagesLoaded] = useState(false);
-    const totalImages = images.length;
-    const loadedRef = useRef(0);
-
-    const handleImageLoad = () => {
-        loadedRef.current += 1;
-        if (loadedRef.current === totalImages) {
-            setImagesLoaded(true);
-        }
-    };
-
-    // --- FIX: Recalculate once images are fully loaded ---
-    useLayoutEffect(() => {
-        if (!imagesLoaded || !contentRef.current) return;
-
-        const contentWidth = contentRef.current.scrollWidth;
-        const viewportWidth = window.innerWidth;
-
-        const maxScroll = -(contentWidth - viewportWidth + 100);
-
-        setConstraints({ min: maxScroll, max: 0 });
-
-        // Reset position if outside new boundaries
-        const pos = x.get();
-        if (pos < maxScroll) x.set(maxScroll);
-        if (pos > 0) x.set(0);
-
-    }, [imagesLoaded, images]);
-
-    const handleWheel = (e: React.WheelEvent) => {
-        const delta = e.deltaY !== 0 ? e.deltaY : e.deltaX;
-        let newX = x.get() - delta * 1.5;
-
-        if (newX > constraints.max) newX = constraints.max;
-        if (newX < constraints.min) newX = constraints.min;
-
-        x.set(newX);
-    };
-
-    return (
-        <div 
-            className="h-full w-full flex flex-col" 
-            onWheel={handleWheel}
+      {/* Title block */}
+      <div className="flex-shrink-0 pt-24 pb-6 px-8 text-center">
+        <motion.h1
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="font-black uppercase leading-[0.88] tracking-[-0.03em] text-white"
+          style={{ fontSize: "clamp(2.5rem, 7vw, 6rem)" }}
         >
-            <div className="flex-shrink-0 w-full p-8 pt-12 text-center z-10 bg-[#f5f3f0]">
-                <div className="max-w-4xl mx-auto">
-                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold leading-[0.9] text-black break-words">
-                        {movie?.title} 
-                    </h1>
-                    <div className="text-xl md:text-3xl text-neutral-400 mt-3 font-light">
-                        ({year})
-                    </div>
-                    <p className="text-[10px] text-neutral-500 mt-6 font-mono uppercase tracking-widest animate-pulse">
-                        Scroll / Drag
-                    </p>
-                </div>
-            </div>
+          {movie.title}
+        </motion.h1>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.25 }}
+          className="mt-3 flex items-center justify-center gap-4 text-white/30 text-xs font-mono tracking-widest"
+        >
+          <span>{year}</span>
+          {movie.runtime > 0 && <><span>·</span><span>{movie.runtime} MIN</span></>}
+          {movie.genres[0] && <><span>·</span><span className="uppercase">{movie.genres[0].name}</span></>}
+        </motion.div>
 
-            <div className="flex-1 relative w-full overflow-hidden flex items-center">
-                <motion.div 
-                    ref={contentRef}
-                    style={{ x: smoothX }} 
-                    className="flex gap-4 md:gap-8 pl-[10vw] pr-[10vw] items-center h-full pb-24"
-                >
-                    {images.map((img, idx) => (
-                        <div key={idx} className="relative flex-shrink-0 group">
-                            <img 
-                                src={`${IMG_FULL_URL}${img.file_path}`} 
-                                alt={`Scene ${idx+1}`}
-                                onLoad={handleImageLoad}  // <-- IMPORTANT FIX
-                                className="h-[35vh] md:h-[45vh] w-auto object-cover grayscale group-hover:grayscale-0 transition-all duration-700 ease-out shadow-xl rounded-sm"
-                                draggable={false}
-                            />
-                            <div className="absolute -bottom-8 left-0 text-[10px] text-neutral-500 font-mono uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                Scene 0{idx + 1}
-                            </div>
-                        </div>
-                    ))}
-                </motion.div>
+        {scenes.length > 0 && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.3 }}
+            transition={{ duration: 1, delay: 0.8 }}
+            className="mt-5 text-[9px] font-mono text-white uppercase tracking-[0.35em]"
+          >
+            ← scroll / drag →
+          </motion.p>
+        )}
+      </div>
+
+      {/* Horizontal strip */}
+      <div className="flex-1 relative overflow-hidden flex items-center">
+        {scenes.length > 0 ? (
+          <div ref={containerRef} className="w-full h-full overflow-hidden flex items-center">
+          <motion.div
+            ref={contentRef}
+            style={{ x: smoothX }}
+            drag="x"
+            dragConstraints={containerRef}
+            dragElastic={0.05}
+            className="flex gap-3 md:gap-5 pl-[8vw] pr-[8vw] items-center h-full pb-16 cursor-grab active:cursor-grabbing select-none"
+          >
+            {scenes.map((sc, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: i * 0.06 + 0.2 }}
+                className="relative flex-shrink-0 group"
+              >
+                <img
+                  src={`${IMG_W1280}${sc.file_path}`}
+                  alt={`Scene ${i + 1}`}
+                  onLoad={() => setLoadedCount(c => c + 1)}
+                  draggable={false}
+                  className="h-[38vh] md:h-[50vh] w-auto object-cover rounded-sm shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700 ease-out"
+                />
+                <div className="absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t from-black/40 to-transparent rounded-b-sm opacity-0 group-hover:opacity-100 transition-opacity" />
+                <span className="absolute bottom-2 right-3 text-[9px] font-mono text-white/0 group-hover:text-white/50 transition-colors tracking-wider">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </motion.div>
+            ))}
+          </motion.div>
+          </div>
+        ) : (
+          <div className="w-full flex items-center justify-center text-white/15 text-xs font-mono tracking-widest">
+            NO IMAGES AVAILABLE
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── INFO VIEW ─────────────────────────────────────────────────────────────────
+function InfoView({ movie, year, credits, scenes }: {
+  movie: MovieData;
+  year: string;
+  credits: Credits;
+  scenes: { file_path: string }[];
+}) {
+  const heroImg = scenes[0]?.file_path
+    ? `${IMG_W1280}${scenes[0].file_path}`
+    : movie.backdrop_path
+    ? `${IMG_W1280}${movie.backdrop_path}`
+    : null;
+
+  return (
+    <div className="w-full h-full flex flex-col md:flex-row overflow-hidden">
+
+      {/* Left: text */}
+      <div className="w-full md:w-[55%] h-full overflow-y-auto px-8 md:px-14 lg:px-20 pt-24 pb-12 flex flex-col justify-center no-scrollbar">
+        <div className="max-w-xl">
+
+          {/* Title */}
+          <motion.h1
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="font-black uppercase leading-[0.88] tracking-[-0.03em] text-white"
+            style={{ fontSize: "clamp(2.8rem, 6vw, 5.5rem)" }}
+          >
+            {movie.title}
+          </motion.h1>
+
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="mt-3 flex flex-wrap items-center gap-3 text-white/35 text-xs font-mono tracking-wider"
+          >
+            <span>{year}</span>
+            {movie.runtime > 0 && <><span className="text-white/15">·</span><span>{movie.runtime} min</span></>}
+          </motion.div>
+
+          {/* Tagline */}
+          {movie.tagline && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.15 }}
+              className="mt-6 text-white/50 italic text-lg leading-snug border-l border-white/20 pl-4"
+            >
+              {movie.tagline}
+            </motion.p>
+          )}
+
+          {/* Overview */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 text-white/45 text-sm leading-relaxed"
+          >
+            {movie.overview}
+          </motion.p>
+
+          {/* Details grid */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-10 pt-8 border-t border-white/10 grid grid-cols-2 gap-x-10 gap-y-7"
+          >
+            <Detail label="Director" value={credits.director} />
+            <Detail label="Runtime" value={movie.runtime > 0 ? `${movie.runtime} min` : "—"} />
+            <div>
+              <span className="text-[9px] font-mono text-white/25 tracking-[0.25em] uppercase block mb-2">Cast</span>
+              <div className="flex flex-col gap-1">
+                {credits.cast.length > 0
+                  ? credits.cast.map(n => <span key={n} className="text-sm text-white/60">{n}</span>)
+                  : <span className="text-sm text-white/30">—</span>
+                }
+              </div>
             </div>
+            <div>
+              <span className="text-[9px] font-mono text-white/25 tracking-[0.25em] uppercase block mb-2">Genres</span>
+              <div className="flex flex-wrap gap-1.5">
+                {movie.genres.length > 0
+                  ? movie.genres.map(g => (
+                    <span key={g.id} className="text-[10px] font-mono border border-white/20 text-white/50 px-2 py-0.5 rounded-sm uppercase tracking-wider">
+                      {g.name}
+                    </span>
+                  ))
+                  : <span className="text-sm text-white/30">—</span>
+                }
+              </div>
+            </div>
+          </motion.div>
         </div>
-    );
+      </div>
+
+      {/* Right: image */}
+      <div className="hidden md:block md:w-[45%] h-full relative overflow-hidden bg-black">
+        {heroImg ? (
+          <motion.img
+            src={heroImg}
+            alt="Film still"
+            initial={{ scale: 1.08, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 1.2, ease: [0.25, 0.1, 0.25, 1] }}
+            className="w-full h-full object-cover opacity-70"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-white/10 text-xs font-mono tracking-wider">NO IMAGE</span>
+          </div>
+        )}
+        {/* Gradient edge */}
+        <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[#080808] to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────────
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-[9px] font-mono text-white/25 tracking-[0.25em] uppercase block mb-2">{label}</span>
+      <span className="text-sm text-white/60">{value}</span>
+    </div>
+  );
 }
