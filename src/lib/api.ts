@@ -32,6 +32,7 @@ export type MovieDetail = {
   director: string;
   cast: string[];
   scenes: { file_path: string }[];
+  imdbRating?: string;
 };
 
 // ─── OMDB ─────────────────────────────────────────────────────────────────────
@@ -103,6 +104,16 @@ export async function getMovieDetail(tmdbOrImdbId: string): Promise<MovieDetail 
     const cast     = (cr.cast || []).slice(0, 4).map((p: any) => p.name as string);
     const scenes   = (img.backdrops || []).slice(0, 6);
 
+    // Fetch IMDb rating from OMDB using the IMDb ID TMDB provides
+    let imdbRating: string | undefined;
+    if (d.imdb_id) {
+      try {
+        const omRes  = await fetch(`${OMDB}?apikey=${omdbKey()}&i=${d.imdb_id}`);
+        const omData = await omRes.json();
+        if (omData.imdbRating && omData.imdbRating !== "N/A") imdbRating = omData.imdbRating;
+      } catch { /* skip */ }
+    }
+
     return {
       title:        d.title || "—",
       year:         d.release_date?.split("-")[0] || "—",
@@ -115,6 +126,7 @@ export async function getMovieDetail(tmdbOrImdbId: string): Promise<MovieDetail 
       director,
       cast,
       scenes,
+      imdbRating,
     };
   } catch {
     return null;
