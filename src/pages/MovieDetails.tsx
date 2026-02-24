@@ -1,9 +1,10 @@
 // src/pages/MovieDetails.tsx
 import { useEffect, useState, useRef, useLayoutEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 import { getMovieDetail, IMG_W1280 } from "../lib/api";
 import type { MovieDetail } from "../lib/api";
+import Navbar from "../components/navbar";
 
 const SF: React.CSSProperties = {
   fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
@@ -13,7 +14,7 @@ export default function MovieDetails() {
   const { imdbID = "" } = useParams();
   const [movie,   setMovie]   = useState<MovieDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [panel,   setPanel]   = useState<"strip" | "info">("strip");
+  const [panel,   setPanel]   = useState<"info" | "strip">("info");
 
   useEffect(() => {
     const orig = document.body.style.overflow;
@@ -27,44 +28,25 @@ export default function MovieDetails() {
   }, [imdbID]);
 
   if (loading) return (
-    <div className="fixed inset-0 bg-[#f8f7f4] flex items-center justify-center">
+    <div className="fixed inset-0 bg-white flex items-center justify-center">
       <span className="text-neutral-300 text-xs tracking-[0.3em] uppercase animate-pulse" style={SF}>Loading</span>
     </div>
   );
 
   if (!movie) return (
-    <div className="fixed inset-0 bg-[#f8f7f4] flex items-center justify-center">
+    <div className="fixed inset-0 bg-white flex items-center justify-center">
       <span className="text-neutral-300 text-xs" style={SF}>Film not found.</span>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-[#f8f7f4]">
+    <div className="fixed inset-0 overflow-hidden bg-white">
 
-      {/* ── NAVBAR ── */}
-      <nav className="absolute top-0 inset-x-0 z-50 flex items-center justify-between px-8 md:px-14 h-14 bg-[#f8f7f4]" style={SF}>
-        <Link to="/" className="transition-colors"
-          style={{ fontWeight: 400, letterSpacing: "-0.015em", color: "#000000", fontSize: "15px" }}>
-          Film Index
-        </Link>
-        <div className="flex items-center gap-7">
-          {([
-            { to: "/",         label: "Home"    },
-            { to: "/discover", label: "Curator" },
-            { to: "/search",   label: "Search"  },
-          ] as const).map(({ to, label }) => (
-            <Link key={to} to={to}
-              className="text-[14px] text-neutral-900 hover:text-neutral-900 transition-colors"
-              style={{ fontWeight: 400, letterSpacing: "-0.01em" }}>
-              {label}
-            </Link>
-          ))}
-        </div>
-      </nav>
+      <Navbar background="#ffffff" />
 
-      {/* ── TOGGLE ── */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-full overflow-hidden border border-neutral-200 bg-white">
-        {(["strip", "info"] as const).map(v => (
+      {/* ── TOGGLE — Info first, then Gallery ── */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-lg overflow-hidden border border-neutral-200 bg-white">
+        {(["info", "strip"] as const).map(v => (
           <button key={v} onClick={() => setPanel(v)}
             className="px-5 py-2 text-[12px] transition-all duration-200"
             style={{
@@ -72,19 +54,19 @@ export default function MovieDetails() {
               background: panel === v ? "#171717" : "transparent",
               color:      panel === v ? "#fff"    : "#a3a3a3",
             }}>
-            {v === "strip" ? "Gallery" : "Info"}
+            {v === "info" ? "Info" : "Gallery"}
           </button>
         ))}
       </div>
 
       <AnimatePresence mode="wait">
-        {panel === "strip" ? (
-          <motion.div key="strip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="w-full h-full">
-            <StripView movie={movie} />
-          </motion.div>
-        ) : (
+        {panel === "info" ? (
           <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="w-full h-full">
             <InfoView movie={movie} />
+          </motion.div>
+        ) : (
+          <motion.div key="strip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="w-full h-full">
+            <StripView movie={movie} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -113,7 +95,7 @@ function StripView({ movie }: { movie: MovieDetail }) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col" onWheel={handleWheel}>
+    <div className="h-full w-full flex flex-col bg-white" onWheel={handleWheel}>
       <div className="flex-shrink-0 pt-24 pb-6 px-8 text-center">
         <motion.h1
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
@@ -122,16 +104,10 @@ function StripView({ movie }: { movie: MovieDetail }) {
         >
           {movie.title}
         </motion.h1>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}
-          className="mt-3 flex items-center justify-center gap-4 text-neutral-400 text-xs tracking-widest" style={SF}>
-          <span>{movie.year}</span>
-          {movie.runtime > 0 && <><span>·</span><span>{movie.runtime} min</span></>}
-          {movie.genres[0] && <><span>·</span><span>{movie.genres[0].name}</span></>}
-        </motion.div>
         {movie.scenes.length > 0 && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 0.3 }} transition={{ delay: 0.9 }}
-            className="mt-5 text-[9px] text-neutral-400 uppercase tracking-[0.35em]" style={{ fontFamily: "monospace" }}>
-            ← scroll / drag →
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 0.3 }} transition={{ delay: 0.3 }}
+            className="mt-5 text-[12px] text-neutral-800 uppercase tracking-[0.10em]" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" }}>
+            Scroll
           </motion.p>
         )}
       </div>
@@ -170,14 +146,13 @@ function InfoView({ movie }: { movie: MovieDetail }) {
     ? `${IMG_W1280}${movie.scenes[0].file_path}`
     : movie.backdrop_path ? `${IMG_W1280}${movie.backdrop_path}` : null;
 
-  // Uniform body text size
   const body: React.CSSProperties = { fontSize: 17, color: "#171717", lineHeight: 1.6 };
 
   return (
-    <div className="w-full h-full flex overflow-hidden bg-[#f8f7f4]"
+    <div className="w-full h-full flex overflow-hidden bg-white"
       style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" }}>
 
-      {/* LEFT — small magazine image, top-aligned */}
+      {/* LEFT — image */}
       <div className="hidden md:flex md:w-[45%] h-full flex-shrink-0 flex-col pt-20 px-14 pb-24">
         {heroImg && (
           <motion.img src={heroImg} alt=""
@@ -190,8 +165,6 @@ function InfoView({ movie }: { movie: MovieDetail }) {
 
       {/* RIGHT — text */}
       <div className="w-full md:w-[55%] h-full overflow-y-auto px-10 md:px-14 pt-20 pb-24 no-scrollbar">
-
-        {/* Title */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <h1 className="text-neutral-900 leading-[1.05] tracking-[-0.02em]"
             style={{ fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 600,
@@ -200,34 +173,25 @@ function InfoView({ movie }: { movie: MovieDetail }) {
           </h1>
         </motion.div>
 
-        {/* Overview — right under title */}
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
           className="mt-5" style={{ ...body, textAlign: "justify" }}>
           {movie.overview}
         </motion.p>
 
-        {/* Meta block — runtime, genres, director, rating */}
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
           className="mt-6">
           <div className="flex gap-16 flex-wrap">
-            <div>
-              {movie.runtime > 0 && <p style={{ ...body, textAlign: "justify" }}>{movie.runtime} min</p>}
-            </div>
-            <div>
-              {movie.director && <p style={{ ...body, textAlign: "justify" }}>{movie.director}</p>}
-            </div>
-            <div>
-              {movie.imdbRating && <p style={body}>★ {movie.imdbRating}</p>}
-            </div>
+            <div>{movie.runtime > 0 && <p style={body}>{movie.runtime} min</p>}</div>
+            <div>{movie.director && <p style={body}>{movie.director}</p>}</div>
+            <div>{movie.imdbRating && <p style={body}>★ {movie.imdbRating}</p>}</div>
           </div>
           {movie.genres.length > 0 && (
-            <p style={{ ...body, textAlign: "justify", marginTop: "0.75rem" }}>
+            <p style={{ ...body, marginTop: "0.75rem" }}>
               {movie.genres.map(g => g.name).join("; ")}
             </p>
           )}
         </motion.div>
 
-        {/* Cast */}
         {movie.cast.length > 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}
             className="mt-6" style={{ columns: 2, columnGap: "2.5rem" }}>
@@ -237,16 +201,12 @@ function InfoView({ movie }: { movie: MovieDetail }) {
           </motion.div>
         )}
 
-        {/* Tagline */}
         {movie.tagline && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
             className="mt-6 italic" style={{ ...body, color: "#343434" }}>
             "{movie.tagline}"
           </motion.p>
         )}
-
-
-
       </div>
     </div>
   );

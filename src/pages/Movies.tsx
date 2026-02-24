@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 
 const STILLS = [
+  "https://www.scenestill.com/storage/film-stills/webp/In_the_Mood_for_Love_screencap_007_webp.webp",
   "https://www.scenestill.com/storage/film-stills/webp/chungking_express_screencap_04_webp.webp",
   "https://www.scenestill.com/storage/film-stills/webp/chungking_express_screencap_60_webp.webp",
   "https://www.scenestill.com/storage/film-stills/webp/chungking_express_screencap_59_webp.webp", 
