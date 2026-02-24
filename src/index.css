@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html, body, #root {
@@ -9,8 +9,8 @@ html, body, #root {
 }
 
 body {
-  background: #0a0a0a;
-  color: white;
+  background: #f8f7f4;
+  color: #171717;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -20,18 +20,5 @@ html, body {
   padding: 0;
 }
 
-/* Hide scrollbar but keep functionality */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-/* Marquee animation */
-@keyframes marquee {
-  0%   { transform: translateX(0%); }
-  100% { transform: translateX(-50%); }
-}
-
-.animate-marquee {
-  animation: marquee 25s linear infinite;
-  display: flex;
-  width: max-content;
-}

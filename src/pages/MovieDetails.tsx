@@ -25,32 +25,37 @@ export default function MovieDetails() {
   }, [imdbID]);
 
   if (loading) return (
-    <div className="fixed inset-0 bg-[#080808] flex items-center justify-center">
-      <div className="text-white/20 text-xs font-mono tracking-[0.3em] uppercase animate-pulse">Loading</div>
+    <div className="fixed inset-0 bg-white flex items-center justify-center">
+      <div className="text-neutral-400 text-xs font-mono tracking-[0.3em] uppercase animate-pulse">Loading</div>
     </div>
   );
 
   if (!movie) return (
-    <div className="fixed inset-0 bg-[#080808] flex items-center justify-center">
-      <div className="text-white/20 text-xs font-mono">Film not found.</div>
+    <div className="fixed inset-0 bg-white flex items-center justify-center">
+      <div className="text-neutral-400 text-xs font-mono">Film not found.</div>
     </div>
   );
 
   return (
-    <div className="fixed inset-0 bg-[#080808] text-white overflow-hidden">
+    <div className="fixed inset-0 bg-white text-neutral-900 overflow-hidden">
 
-      {/* Nav */}
-      <nav className="absolute top-0 inset-x-0 z-50 flex items-center justify-between px-6 md:px-10 pt-6">
-        <Link to="/" className="text-[10px] font-mono tracking-[0.25em] uppercase text-white/30 hover:text-white/80 transition-colors">
-          ← Index
+      <nav
+        className="absolute top-0 inset-x-0 z-50 flex items-center justify-between px-8 md:px-14 h-14 bg-white"
+        style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" }}
+      >
+        <Link to="/"
+          className="text-[15px] text-neutral-600 hover:text-neutral-900 transition-colors"
+          style={{ fontWeight: 400, letterSpacing: "-0.015em" }}>
+          Film Index
         </Link>
-        <div className="flex items-center gap-1 border border-white/15 rounded-full p-1">
+        <div className="flex items-center gap-7">
           {(["strip", "info"] as const).map(v => (
-            <button
-              key={v} onClick={() => setPanel(v)}
-              className={`px-3 py-1 rounded-full text-[9px] font-mono tracking-[0.2em] uppercase transition-all duration-200 ${panel === v ? "bg-white text-black" : "text-white/30 hover:text-white/60"}`}
-            >
-              {v === "strip" ? "Gallery" : "Info"}
+            <button key={v} onClick={() => setPanel(v)}
+              className={`text-[14px] transition-colors`}
+              style={{ fontWeight: 400, letterSpacing: "-0.01em" }}>
+              <span className={panel === v ? "text-neutral-900" : "text-neutral-500 hover:text-neutral-900"}>
+                {v === "strip" ? "Gallery" : "Info"}
+              </span>
             </button>
           ))}
         </div>
@@ -106,7 +111,7 @@ function StripView({ movie }: { movie: MovieDetail }) {
         </motion.h1>
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}
-          className="mt-3 flex items-center justify-center gap-4 text-white/30 text-xs font-mono tracking-widest"
+          className="mt-3 flex items-center justify-center gap-4 text-neutral-600 text-xs font-mono tracking-widest"
         >
           <span>{movie.year}</span>
           {movie.runtime > 0 && <><span>·</span><span>{movie.runtime} MIN</span></>}
@@ -114,7 +119,7 @@ function StripView({ movie }: { movie: MovieDetail }) {
         </motion.div>
         {movie.scenes.length > 0 && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 0.3 }} transition={{ delay: 0.8 }}
-            className="mt-5 text-[9px] font-mono text-white uppercase tracking-[0.35em]">
+            className="mt-5 text-[9px] font-mono text-neutral-900 uppercase tracking-[0.35em]">
             ← scroll / drag →
           </motion.p>
         )}
@@ -136,14 +141,14 @@ function StripView({ movie }: { movie: MovieDetail }) {
                   onLoad={() => setLoadedCount(c => c + 1)} draggable={false}
                   className="h-[38vh] md:h-[50vh] w-auto object-cover rounded-sm shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700 ease-out"
                 />
-                <span className="absolute bottom-2 right-3 text-[9px] font-mono text-white/0 group-hover:text-white/50 transition-colors tracking-wider">
+                <span className="absolute bottom-2 right-3 text-[9px] font-mono text-neutral-400/0 group-hover:text-neutral-600 transition-colors tracking-wider">
                   {String(i + 1).padStart(2, "0")}
                 </span>
               </motion.div>
             ))}
           </motion.div>
         ) : (
-          <div className="w-full flex items-center justify-center text-white/15 text-xs font-mono tracking-widest">NO IMAGES AVAILABLE</div>
+          <div className="w-full flex items-center justify-center text-neutral-400 text-xs font-mono tracking-widest">NO IMAGES AVAILABLE</div>
         )}
       </div>
     </div>
@@ -171,40 +176,40 @@ function InfoView({ movie }: { movie: MovieDetail }) {
             {movie.title}
           </motion.h1>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}
-            className="mt-3 flex flex-wrap items-center gap-3 text-white/35 text-xs font-mono tracking-wider">
+            className="mt-3 flex flex-wrap items-center gap-3 text-neutral-600 text-xs font-mono tracking-wider">
             <span>{movie.year}</span>
-            {movie.runtime > 0 && <><span className="text-white/15">·</span><span>{movie.runtime} min</span></>}
+            {movie.runtime > 0 && <><span className="text-neutral-400">·</span><span>{movie.runtime} min</span></>}
           </motion.div>
 
           {movie.tagline && (
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}
-              className="mt-6 text-white/50 italic text-lg leading-snug border-l border-white/20 pl-4">
+              className="mt-6 text-neutral-600 italic text-lg leading-snug border-l border-neutral-300 pl-4">
               {movie.tagline}
             </motion.p>
           )}
 
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-            className="mt-6 text-white/45 text-sm leading-relaxed">
+            className="mt-6 text-neutral-700 text-sm leading-relaxed">
             {movie.overview}
           </motion.p>
 
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="mt-10 pt-8 border-t border-white/10 grid grid-cols-2 gap-x-10 gap-y-7">
+            className="mt-10 pt-8 border-t border-neutral-200 grid grid-cols-2 gap-x-10 gap-y-7">
             <Field label="Director" value={movie.director} />
             <Field label="Runtime"  value={movie.runtime > 0 ? `${movie.runtime} min` : "—"} />
             <div>
               <Label>Cast</Label>
               <div className="flex flex-col gap-1">
                 {movie.cast.length > 0
-                  ? movie.cast.map(n => <span key={n} className="text-sm text-white/60">{n}</span>)
-                  : <span className="text-sm text-white/30">—</span>}
+                  ? movie.cast.map(n => <span key={n} className="text-sm text-neutral-700">{n}</span>)
+                  : <span className="text-sm text-neutral-400">—</span>}
               </div>
             </div>
             <div>
               <Label>Genres</Label>
               <div className="flex flex-wrap gap-1.5">
                 {movie.genres.map(g => (
-                  <span key={g.id} className="text-[10px] font-mono border border-white/20 text-white/50 px-2 py-0.5 rounded-sm uppercase tracking-wider">
+                  <span key={g.id} className="text-[10px] font-mono border border-neutral-300 text-neutral-600 px-2 py-0.5 rounded-sm uppercase tracking-wider">
                     {g.name}
                   </span>
                 ))}
@@ -215,22 +220,22 @@ function InfoView({ movie }: { movie: MovieDetail }) {
       </div>
 
       {/* Right: image */}
-      <div className="hidden md:block md:w-[45%] h-full relative overflow-hidden bg-black">
+      <div className="hidden md:block md:w-[45%] h-full relative overflow-hidden bg-neutral-100">
         {heroImg ? (
           <motion.img src={heroImg} alt="" initial={{ scale: 1.08, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 1.2 }} className="w-full h-full object-cover opacity-70" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-white/10 text-xs font-mono">NO IMAGE</div>
+          <div className="w-full h-full flex items-center justify-center text-neutral-400 text-xs font-mono">NO IMAGE</div>
         )}
-        <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[#080808] to-transparent" />
+        <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-white to-transparent" />
       </div>
     </div>
   );
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <span className="text-[9px] font-mono text-white/25 tracking-[0.25em] uppercase block mb-2">{children}</span>;
+  return <span className="text-[9px] font-mono text-neutral-500 tracking-[0.25em] uppercase block mb-2">{children}</span>;
 }
 function Field({ label, value }: { label: string; value: string }) {
-  return <div><Label>{label}</Label><span className="text-sm text-white/60">{value}</span></div>;
+  return <div><Label>{label}</Label><span className="text-sm text-neutral-700">{value}</span></div>;
 }

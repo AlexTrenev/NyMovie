@@ -1,264 +1,138 @@
 // src/pages/Movies.tsx
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { searchMovies, discoverMovies } from "../lib/api";
+import { searchMovies } from "../lib/api";
 import type { SearchResult } from "../lib/api";
 
-// ─── FILTER CONFIG ────────────────────────────────────────────────────────────
+// Deterministic scatter from index
+function seed(i: number, o = 0) { return ((i * 2654435761 + o) >>> 0) / 4294967296; }
+function rot(i: number) { return (seed(i, 1) - 0.5) * 12; }
+function tx(i: number)  { return (seed(i, 2) - 0.5) * 20; }
+function ty(i: number)  { return (seed(i, 3) - 0.5) * 16; }
 
-const STEPS = [
-  {
-    key: "era",
-    label: "01 / ERA",
-    question: "When was it made?",
-    options: [
-      { label: "Pre-1970",  sub: "The Classics",   value: "classic"  },
-      { label: "1970–1989", sub: "New Hollywood",  value: "70s_80s"  },
-      { label: "1990–2009", sub: "The Golden Age", value: "90s_00s"  },
-      { label: "2010+",     sub: "Contemporary",   value: "modern"   },
-    ],
-  },
-  {
-    key: "mood",
-    label: "02 / MOOD",
-    question: "How do you want to feel?",
-    options: [
-      { label: "Feelgood",   sub: "Light & fun",         value: "feelgood"   },
-      { label: "Heartfelt",  sub: "Drama & romance",     value: "heartfelt"  },
-      { label: "Tense",      sub: "Thriller & mystery",  value: "suspense"   },
-      { label: "Intense",    sub: "Action & war",        value: "intense"    },
-      { label: "Thoughtful", sub: "Drama & history",     value: "thoughtful" },
-      { label: "Dark",       sub: "Horror & crime",      value: "dark"       },
-      { label: "Epic",       sub: "Adventure & fantasy", value: "epic"       },
-      { label: "Sci-Fi",     sub: "Future & beyond",     value: "sci-fi"     },
-    ],
-  },
-  {
-    key: "duration",
-    label: "03 / TIME",
-    question: "How long do you have?",
-    options: [
-      { label: "Quick",    sub: "Under 90 min", value: "short"  },
-      { label: "Standard", sub: "90 – 120 min", value: "medium" },
-      { label: "Epic",     sub: "Over 120 min", value: "long"   },
-    ],
-  },
-] as const;
-
-type StepKey = "era" | "mood" | "duration";
-
-const GENRE_MAP: Record<string, { include: string; exclude?: string }> = {
-  feelgood:   { include: "35|10751|16", exclude: "27|80|53|10752" },
-  heartfelt:  { include: "18|10749",    exclude: "27|53|10752"    },
-  dark:       { include: "27|80"                                  },
-  suspense:   { include: "53|9648"                                },
-  intense:    { include: "28|10752"                               },
-  thoughtful: { include: "18|36|99",    exclude: "10749|53"       },
-  epic:       { include: "12|14"                                  },
-  "sci-fi":   { include: "878"                                    },
-};
-
-// ─── COMPONENT ────────────────────────────────────────────────────────────────
+const EDITORIAL: SearchResult[] = [
+  { id: "tt0050083", title: "12 Angry Men",      year: "1957", poster: "https://m.media-amazon.com/images/M/MV5BMTYwOTEwNjAzMl5BMl5BanBnXkFtZTcwMjc3NjA0OA@@._V1_SX300.jpg" },
+  { id: "tt0108052", title: "Schindler's List",  year: "1993", poster: "https://m.media-amazon.com/images/M/MV5BNDE4OTU5OTU5M15BMl5BanBnXkFtZTgwNjU3NDg4MTE@._V1_SX300.jpg" },
+  { id: "tt0137523", title: "Fight Club",         year: "1999", poster: "https://m.media-amazon.com/images/M/MV5BOTgyOGQ1NDItNGU3Ny00MjU3LTg2YWEtNmEyYjBiMjI1Y2M5XkEyXkFqcGc@._V1_SX300.jpg" },
+  { id: "tt0110912", title: "Pulp Fiction",       year: "1994", poster: "https://m.media-amazon.com/images/M/MV5BNGNhMDIzZTUtNTBlZi00MTRlLWFjM2ItYzViMjE3YzI5MjljXkEyXkFqcGc@._V1_SX300.jpg" },
+  { id: "tt0816692", title: "Interstellar",       year: "2014", poster: "https://m.media-amazon.com/images/M/MV5BYzdjMDAxZGItMjI2My00ODA1LTlkNzItOWFiZWFiMjkyZjEzXkEyXkFqcGc@._V1_SX300.jpg" },
+  { id: "tt1375666", title: "Inception",          year: "2010", poster: "https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_SX300.jpg" },
+  { id: "tt0120737", title: "The Lord of the Rings", year: "2001", poster: "https://m.media-amazon.com/images/M/MV5BNzIxMDQ2YTctNDY4MC00NTM4LTswMDMtZTdmZDdiMDExZjE4XkEyXkFqcGc@._V1_SX300.jpg" },
+  { id: "tt0068646", title: "The Godfather",      year: "1972", poster: "https://m.media-amazon.com/images/M/MV5BYTdiOTIyZTQtNmQ1OS00NjZlLWIyMTgtYzk5Y2M3ZDVmMDk1XkEyXkFqcGc@._V1_SX300.jpg" },
+];
 
 export default function Movies() {
-  const [selections, setSelections] = useState<Partial<Record<StepKey, string>>>({});
-  const [movies,     setMovies]     = useState<SearchResult[]>([]);
-  const [loading,    setLoading]    = useState(false);
-  const [searchQ,    setSearchQ]    = useState("");
-  const [searchErr,  setSearchErr]  = useState<string | null>(null);
-  const [mode,       setMode]       = useState<"filter" | "search" | "idle">("idle");
+  const [searchParams] = useSearchParams();
+  const [query,    setQuery]    = useState("");
+  const [results,  setResults]  = useState<SearchResult[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [err,      setErr]      = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const currentStep = STEPS.find(s => !selections[s.key as StepKey]);
-  const allSelected = STEPS.every(s => selections[s.key as StepKey]);
-
-  // Discovery
   useEffect(() => {
-    if (!allSelected) return;
-    const { era, mood, duration } = selections;
-    setMode("filter");
-    setLoading(true);
+    if (searchParams.get("search") === "1") inputRef.current?.focus();
+  }, [searchParams]);
 
-    const params: Record<string, string> = {
-      sort_by: "vote_average.desc",
-      "vote_count.gte": "800",
-      page: "1",
-    };
-    if (era === "classic")  params["primary_release_date.lte"] = "1969-12-31";
-    if (era === "70s_80s")  { params["primary_release_date.gte"] = "1970-01-01"; params["primary_release_date.lte"] = "1989-12-31"; }
-    if (era === "90s_00s")  { params["primary_release_date.gte"] = "1990-01-01"; params["primary_release_date.lte"] = "2009-12-31"; }
-    if (era === "modern")   params["primary_release_date.gte"] = "2010-01-01";
-    if (duration === "short")  params["with_runtime.lte"] = "90";
-    if (duration === "medium") { params["with_runtime.gte"] = "90"; params["with_runtime.lte"] = "120"; }
-    if (duration === "long")   params["with_runtime.gte"] = "120";
-    if (mood && GENRE_MAP[mood]) {
-      params["with_genres"] = GENRE_MAP[mood].include;
-      if (GENRE_MAP[mood].exclude) params["without_genres"] = GENRE_MAP[mood].exclude!;
-    }
-
-    discoverMovies(params)
-      .then(r => setMovies(r.filter(m => m.poster)))
-      .catch(() => setMovies([]))
-      .finally(() => setLoading(false));
-  }, [allSelected, JSON.stringify(selections)]);
-
-  // Search
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQ.trim()) return;
-    setMode("search"); setSelections({}); setLoading(true); setSearchErr(null);
-    const results = await searchMovies(searchQ).catch(() => []);
-    setMovies(results);
-    if (!results.length) setSearchErr(`No results for "${searchQ}"`);
+    if (!query.trim()) return;
+    setLoading(true); setErr(null); setSearched(true);
+    const res = await searchMovies(query).catch(() => []);
+    setResults(res);
+    if (!res.length) setErr(`Nothing found for "${query}"`);
     setLoading(false);
   };
 
-  const select = (key: StepKey, value: string) =>
-    setSelections(prev => ({ ...prev, [key]: value }));
-
-  const reset = () => {
-    setSelections({}); setMovies([]); setSearchQ("");
-    setSearchErr(null); setMode("idle"); setLoading(false);
-  };
+  const clear = () => { setQuery(""); setResults([]); setSearched(false); setErr(null); };
+  const display = searched ? results : EDITORIAL;
 
   return (
-    <div className="min-h-dvh bg-[#0a0a0a] text-white font-sans overflow-x-hidden">
+    <div className="min-h-dvh bg-[#f8f7f4]" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
 
-      <header className="border-b border-white/10 px-6 md:px-12 py-5 flex items-center justify-between sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur">
-        <span className="text-xs font-mono tracking-[0.25em] text-white/40 uppercase">Film Index</span>
-        {mode !== "idle" && (
-          <button onClick={reset} className="text-xs font-mono tracking-[0.2em] text-white/40 hover:text-white transition-colors uppercase">
-            ← Start over
-          </button>
-        )}
-      </header>
+      {/* Header */}
+      <div className="pt-28 pb-8 px-8 md:px-14">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+          <h1 className="text-neutral-900 font-bold leading-[0.85] tracking-[-0.04em]"
+            style={{ fontSize: "clamp(3.5rem, 9vw, 8rem)" }}>
+            Film<br /><span className="text-neutral-300">Archive</span>
+          </h1>
 
-      <section className="px-6 md:px-12 pt-16 pb-10 border-b border-white/10">
-        <h1 className="font-black uppercase leading-[0.88] tracking-[-0.03em]" style={{ fontSize: "clamp(3.5rem, 11vw, 9rem)" }}>
-          Find Your<br /><span className="text-white/20">Next Film</span>
-        </h1>
-        <p className="mt-6 text-white/40 text-sm font-mono tracking-wider max-w-md">
-          Three filters. Four results. No noise. Powered by OMDB &amp; TMDB.
-        </p>
-      </section>
-
-      <section className="px-6 md:px-12 py-8 border-b border-white/10">
-        <form onSubmit={handleSearch} className="flex items-center gap-4">
-          <input
-            value={searchQ} onChange={e => setSearchQ(e.target.value)}
-            placeholder="Search by title…"
-            className="flex-1 bg-transparent text-white text-lg md:text-xl font-light placeholder-white/20 focus:outline-none border-b border-white/20 focus:border-white/60 pb-2 transition-colors"
-          />
-          <button type="submit" className="text-white/40 hover:text-white transition-colors text-2xl">→</button>
-        </form>
-        {searchErr && <p className="mt-3 text-red-400 text-xs font-mono">{searchErr}</p>}
-      </section>
-
-      {/* Step wizard */}
-      <AnimatePresence mode="wait">
-        {mode !== "search" && !allSelected && currentStep && (
-          <motion.section
-            key={currentStep.key}
-            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.35 }}
-            className="px-6 md:px-12 py-12 border-b border-white/10"
-          >
-            <div className="flex items-center gap-4 mb-10">
-              {STEPS.map((s, i) => {
-                const done = !!selections[s.key as StepKey];
-                const current = s.key === currentStep.key;
-                return (
-                  <div key={s.key} className="flex items-center gap-4">
-                    <div className={`flex items-center gap-2 transition-all ${current ? "opacity-100" : done ? "opacity-60" : "opacity-20"}`}>
-                      <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[9px] font-mono ${done ? "bg-white border-white text-black" : current ? "border-white/80" : "border-white/20 text-white/20"}`}>
-                        {done ? "✓" : i + 1}
-                      </span>
-                      <span className="text-[10px] font-mono tracking-[0.2em] uppercase hidden sm:block text-white/60">{s.key}</span>
-                    </div>
-                    {i < STEPS.length - 1 && <span className="text-white/15 text-xs">─</span>}
-                  </div>
-                );
-              })}
+          <form onSubmit={handleSearch} className="flex items-end gap-3 pb-1">
+            <div className="relative">
+              <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Search title…" style={{ fontFamily: "inherit" }}
+                className="w-64 md:w-80 bg-transparent border-b border-neutral-300 focus:border-neutral-900 pb-1.5 text-neutral-900 text-base placeholder-neutral-400 focus:outline-none transition-colors" />
+              {searched && (
+                <button type="button" onClick={clear}
+                  className="absolute right-0 bottom-2 text-neutral-400 hover:text-neutral-900 text-sm transition-colors">✕</button>
+              )}
             </div>
-
-            <span className="text-[10px] font-mono text-white/30 tracking-[0.25em] uppercase block mb-2">{currentStep.label}</span>
-            <h2 className="text-3xl md:text-4xl font-bold mb-8">{currentStep.question}</h2>
-
-            <div className="flex flex-wrap gap-3">
-              {currentStep.options.map(opt => (
-                <motion.button
-                  key={opt.value} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                  onClick={() => select(currentStep.key as StepKey, opt.value)}
-                  className="group flex flex-col items-start px-5 py-4 border border-white/15 hover:border-white/70 hover:bg-white hover:text-black transition-all duration-200 rounded-sm text-left min-w-[120px]"
-                >
-                  <span className="text-sm font-bold uppercase tracking-wide">{opt.label}</span>
-                  <span className="text-[10px] font-mono text-white/40 group-hover:text-black/50 mt-1 transition-colors">{opt.sub}</span>
-                </motion.button>
-              ))}
-            </div>
-
-            {Object.keys(selections).length > 0 && (
-              <div className="mt-8 flex flex-wrap gap-2">
-                {STEPS.filter(s => selections[s.key as StepKey]).map(s => {
-                  const opt = s.options.find(o => o.value === selections[s.key as StepKey]);
-                  return (
-                    <span key={s.key} className="text-[10px] font-mono uppercase tracking-wider bg-white/10 text-white/60 px-3 py-1.5 rounded-full">
-                      {s.key}: {opt?.label}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </motion.section>
-        )}
-      </AnimatePresence>
-
-      {/* Results */}
-      <AnimatePresence mode="wait">
-        {loading && (
-          <motion.section key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-6 md:px-12 py-12">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[0,1,2,3].map(i => <div key={i} className="aspect-[2/3] bg-white/5 animate-pulse rounded-sm" style={{ animationDelay: `${i*80}ms` }} />)}
-            </div>
-          </motion.section>
-        )}
-        {!loading && movies.length > 0 && (
-          <motion.section key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-6 md:px-12 py-12">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {movies.map((m, i) => (
-                <motion.div key={m.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
-                  <Link to={`/movie/${m.id}`} className="group block relative aspect-[2/3] overflow-hidden rounded-sm bg-white/5">
-                    <img src={m.poster} alt={m.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    <div className="absolute inset-x-0 bottom-0 p-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                      <p className="text-white text-sm font-bold leading-tight line-clamp-2">{m.title}</p>
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-white/50 text-[10px] font-mono">{m.year}</span>
-                        {m.imdbRating && <span className="text-[10px] font-mono bg-yellow-400 text-black px-1.5 py-0.5 rounded-sm font-bold">★ {m.imdbRating}</span>}
-                      </div>
-                    </div>
-                    <div className="absolute top-3 left-3 text-[9px] font-mono text-white/30 bg-black/40 px-1.5 py-0.5 rounded-sm">{String(i+1).padStart(2,"0")}</div>
-                  </Link>
-                </motion.div>
-              ))}
-            </div>
-            <p className="mt-8 text-center text-white/20 text-xs font-mono tracking-wider">Click a poster to open the film viewer →</p>
-          </motion.section>
-        )}
-        {!loading && movies.length === 0 && mode !== "idle" && !currentStep && (
-          <motion.section key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="px-6 md:px-12 py-24 text-center">
-            <p className="text-white/20 text-sm font-mono uppercase tracking-widest">No matches found.</p>
-            <button onClick={reset} className="mt-6 text-xs font-mono text-white/40 hover:text-white underline underline-offset-4 transition-colors">Try different filters</button>
-          </motion.section>
-        )}
-      </AnimatePresence>
-
-      <footer className="border-t border-white/8 px-6 md:px-12 py-6 flex items-center justify-between mt-8">
-        <span className="text-[10px] font-mono text-white/20 tracking-wider uppercase">Film Index</span>
-        <div className="flex items-center gap-4 text-[10px] font-mono text-white/15">
-          <span>TMDB</span><span className="text-white/10">·</span><span>OMDB</span><span className="text-white/10">·</span><span>React + Framer Motion</span>
+            <button type="submit"
+              className="text-[11px] font-mono tracking-[0.2em] uppercase text-neutral-400 hover:text-neutral-900 transition-colors pb-1.5">
+              Go
+            </button>
+          </form>
         </div>
-      </footer>
+
+        <p className="mt-3 text-[11px] font-mono tracking-[0.2em] uppercase text-neutral-400">
+          {searched ? `${results.length} results for "${query}"` : "Editorial picks"}
+        </p>
+        {err && <p className="mt-2 text-sm text-red-400 italic">{err}</p>}
+      </div>
+
+      {/* Grid */}
+      <div className="px-8 md:px-14 pb-32">
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[0,1,2,3].map(i => (
+                <div key={i} className="aspect-[2/3] bg-neutral-200 animate-pulse" style={{ animationDelay: `${i*80}ms` }} />
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-12">
+              {display.map((m, i) => <PosterCard key={m.id} movie={m} index={i} />)}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!searched && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+            className="mt-24 flex items-center gap-6 border-t border-neutral-200 pt-8">
+            <span className="text-neutral-400 text-sm italic">Not sure what to watch?</span>
+            <Link to="/discover"
+              className="text-[11px] font-mono tracking-[0.2em] uppercase text-neutral-900 border-b border-neutral-900 pb-0.5 hover:opacity-40 transition-opacity">
+              Try the Curator →
+            </Link>
+          </motion.div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function PosterCard({ movie, index }: { movie: SearchResult; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 28, rotate: rot(index) }}
+      animate={{ opacity: 1, y: 0,  rotate: rot(index) }}
+      transition={{ duration: 0.55, delay: index * 0.06, ease: [0.25, 0.1, 0.25, 1] }}
+      whileHover={{ rotate: 0, scale: 1.05, zIndex: 20, transition: { duration: 0.22 } }}
+      style={{ x: tx(index), y: ty(index), transformOrigin: "center bottom", position: "relative", zIndex: 1 }}
+    >
+      <Link to={`/movie/${movie.id}`} className="block group">
+        <div className="aspect-[2/3] overflow-hidden bg-neutral-200 shadow-[0_4px_24px_rgba(0,0,0,0.10)] group-hover:shadow-[0_12px_40px_rgba(0,0,0,0.18)] transition-shadow duration-300">
+          <img src={movie.poster} alt={movie.title} className="w-full h-full object-cover" />
+        </div>
+        <div className="mt-2.5 px-0.5">
+          <p className="text-[13px] text-neutral-800 leading-snug line-clamp-1 font-medium">{movie.title}</p>
+          <p className="text-[11px] font-mono text-neutral-400 mt-0.5 tracking-wider">{movie.year}</p>
+        </div>
+      </Link>
+    </motion.div>
   );
 }
