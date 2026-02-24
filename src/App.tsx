@@ -1,6 +1,6 @@
 // src/App.tsx
 import { Routes, Route, Link, useLocation } from "react-router-dom";
-import Movies from "./pages/Movies";
+import Movies from "./pages/Home";
 import MovieDetails from "./pages/MovieDetails";
 import Discover from "./pages/Discover";
 import Search from "./pages/Search";
