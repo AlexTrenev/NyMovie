@@ -1,33 +1,22 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
-}
+:root { color-scheme: light; }
 
-html, body, #root {
-  height: 100%;
-}
+html, body, #root { height: 100%; }
 
 body {
-  @apply bg-neutral-50 text-neutral-900 antialiased;
-}
-
-
-html, body {
+  background: #f8f7f4;
+  color: #171717;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   margin: 0;
   padding: 0;
 }
 
-/* I din globala CSS-fil, t.ex. src/index.css */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-@layer utilities {
-  @keyframes marquee {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(-100%); }
-  }
-
-  .animate-marquee {
-    /* Du kan justera '30s' för att ändra hastigheten (längre tid = långsammare) */
-    animation: marquee 20s linear infinite;
-  }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
