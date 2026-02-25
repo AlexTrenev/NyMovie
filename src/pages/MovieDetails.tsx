@@ -4,7 +4,6 @@ import { useParams } from "react-router-dom";
 import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 import { getMovieDetail, IMG_W1280 } from "../lib/api";
 import type { MovieDetail } from "../lib/api";
-import Navbar from "../components/navbar";
 import FilmCard from "../components/FilmCard";
 
 const SF: React.CSSProperties = {
@@ -43,10 +42,8 @@ export default function MovieDetails() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-white">
 
-      <Navbar background="#ffffff" />
-
-      {/* ── TOGGLE — Info first, then Gallery ── */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center rounded-lg overflow-hidden border border-neutral-200 bg-white">
+      {/* ── TOGGLE ── */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center rounded-lg overflow-hidden border border-neutral-200 bg-white">
         {(["info", "strip"] as const).map(v => (
           <button key={v} onClick={() => setPanel(v)}
             className="px-5 py-2 text-[12px] transition-all duration-200"
@@ -63,7 +60,6 @@ export default function MovieDetails() {
       <AnimatePresence mode="wait">
         {panel === "info" ? (
           <motion.div key="info" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="w-full h-full">
-            {/* FilmCard fills the fixed container — pass h-full so the inner scroll works */}
             <FilmCard movie={movie} className="h-full" />
           </motion.div>
         ) : (
@@ -76,7 +72,6 @@ export default function MovieDetails() {
   );
 }
 
-// ─── STRIP VIEW ───────────────────────────────────────────────────────────────
 function StripView({ movie }: { movie: MovieDetail }) {
   const x = useMotionValue(0);
   const smoothX = useSpring(x, { stiffness: 180, damping: 38, mass: 0.6 });
@@ -108,7 +103,8 @@ function StripView({ movie }: { movie: MovieDetail }) {
         </motion.h1>
         {movie.scenes.length > 0 && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 0.3 }} transition={{ delay: 0.3 }}
-            className="mt-5 text-[12px] text-neutral-800 uppercase tracking-[0.10em]" style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" }}>
+            className="mt-5 text-[12px] text-neutral-800 uppercase tracking-[0.10em]"
+            style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" }}>
             Scroll
           </motion.p>
         )}

@@ -1,5 +1,6 @@
 // src/App.tsx
 import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { createPortal } from "react-dom";
 import Movies from "./pages/Home";
 import MovieDetails from "./pages/MovieDetails";
 import Discover from "./pages/Discover";
@@ -9,7 +10,6 @@ import About from "./pages/About";
 export default function App() {
   return (
     <>
-      <Navbar />
       <Routes>
         <Route path="/"              element={<Movies />} />
         <Route path="/discover"      element={<Discover />} />
@@ -17,17 +17,17 @@ export default function App() {
         <Route path="/about"         element={<About />} />
         <Route path="/movie/:imdbID" element={<MovieDetails />} />
       </Routes>
+      <NavbarPortal />
     </>
   );
 }
 
+function NavbarPortal() {
+  return createPortal(<Navbar />, document.body);
+}
+
 function Navbar() {
   const location = useLocation();
-  const isHome   = location.pathname === "/";
-  const isDetail = location.pathname.startsWith("/movie/");
-
-  // Home + detail = dark bg, white text. Other pages = light bg, dark text
-  const isDark = isHome || isDetail;
 
   const links = [
     { to: "/",         label: "Home"    },
@@ -38,38 +38,46 @@ function Navbar() {
 
   return (
     <nav
-      className="fixed top-0 inset-x-0 z-50 flex items-center justify-between px-8 md:px-14 h-14"
       style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: "3.5rem",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 2rem",
+        background: "transparent",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
-        background: isDark ? "transparent" : "#f8f7f4",
       }}
+      className="md:px-14"
     >
       <Link
         to="/"
-        className="text-[15px] transition-colors"
         style={{
+          fontSize: "18px",
           fontWeight: 400,
           letterSpacing: "-0.015em",
-          color: isDark ? "rgba(255,255,255,0.9)" : "#171717",
+          color: "#171717",
         }}
       >
         Film Index
       </Link>
 
-      <div className="flex items-center gap-7">
+      <div style={{ display: "flex", alignItems: "center", gap: "1.75rem" }}>
         {links.map(({ to, label }) => {
           const active = location.pathname === to;
           return (
             <Link
               key={to}
               to={to}
-              className="text-[14px] transition-colors"
               style={{
+                fontSize: "14px",
                 fontWeight: 400,
                 letterSpacing: "-0.01em",
-                color: isDark
-                  ? active ? "rgba(255,255,255,1)" : "rgba(255,255,255,0.45)"
-                  : active ? "#171717" : "#a3a3a3",
+                color: active ? "#171717" : "#a3a3a3",
               }}
             >
               {label}
