@@ -5,7 +5,7 @@
 html, body, #root { height: 100%; }
 
 body {
-  background: #f8f7f4;
+  background: #ffffff;
   color: #171717;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -19,4 +19,17 @@ body {
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+a {
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+  background-clip: unset;
+  -webkit-background-clip: unset;
+  text-decoration: none;
+}
+
+a span {
+  -webkit-text-fill-color: inherit;
+  background-clip: unset;
+  -webkit-background-clip: unset;
 }
