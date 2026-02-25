@@ -4,6 +4,7 @@ import Movies from "./pages/Home";
 import MovieDetails from "./pages/MovieDetails";
 import Discover from "./pages/Discover";
 import Search from "./pages/Search";
+import About from "./pages/About";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/"              element={<Movies />} />
         <Route path="/discover"      element={<Discover />} />
         <Route path="/search"        element={<Search />} />
+        <Route path="/about"         element={<About />} />
         <Route path="/movie/:imdbID" element={<MovieDetails />} />
       </Routes>
     </>
@@ -31,6 +33,7 @@ function Navbar() {
     { to: "/",         label: "Home"    },
     { to: "/discover", label: "Curator" },
     { to: "/search",   label: "Search"  },
+    { to: "/about",    label: "About"   },
   ];
 
   return (

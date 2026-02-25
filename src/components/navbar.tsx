@@ -50,6 +50,7 @@ export default function Navbar({ theme = "light", background }: NavbarProps) {
           { to: "/",         label: "Home"    },
           { to: "/discover", label: "Curator" },
           { to: "/search",   label: "Search"  },
+          { to: "/about",    label: "About"   },
         ] as const).map(({ to, label }) => {
           const color = isActive(to) ? textColor : mutedColor;
           return (
