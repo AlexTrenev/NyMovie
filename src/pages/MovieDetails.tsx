@@ -5,7 +5,7 @@ import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motio
 import { getMovieDetail, IMG_W1280 } from "../lib/api";
 import type { MovieDetail } from "../lib/api";
 import Navbar from "../components/navbar";
-import FilmCard from "../components/filmcard";
+import FilmCard from "../components/FilmCard";
 
 const SF: React.CSSProperties = {
   fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif",
